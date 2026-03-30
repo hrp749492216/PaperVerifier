@@ -65,6 +65,17 @@ def _search_sections(
         _search_sections(sec.subsections, keywords, matches)
 
 
+def _extract_single_section_text(section: Section) -> str:
+    """Recursively extract text from a single section and all its subsections."""
+    body_parts: list[str] = []
+    for para in section.paragraphs:
+        body_parts.append(para.raw_text)
+    for sub in section.subsections:
+        body_parts.append(f"\n### [{sub.id}] {sub.title}")
+        body_parts.append(_extract_single_section_text(sub))
+    return "\n\n".join(body_parts)
+
+
 def _extract_section_text(
     document: ParsedDocument,
     sections: list[Section],
@@ -76,15 +87,7 @@ def _extract_section_text(
     parts: list[str] = []
     for sec in sections:
         header = f"[{sec.id}] {sec.title}"
-        body_parts: list[str] = []
-        for para in sec.paragraphs:
-            body_parts.append(para.raw_text)
-        # Include subsection text recursively
-        for sub in sec.subsections:
-            body_parts.append(f"\n### [{sub.id}] {sub.title}")
-            for para in sub.paragraphs:
-                body_parts.append(para.raw_text)
-        body = "\n\n".join(body_parts) if body_parts else "(Empty section)"
+        body = _extract_single_section_text(sec) or "(Empty section)"
         parts.append(f"## {header}\n\n{body}")
 
     return "\n\n---\n\n".join(parts)

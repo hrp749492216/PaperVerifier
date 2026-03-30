@@ -7,6 +7,7 @@ comparisons, and human-readable change summaries.
 from __future__ import annotations
 
 import difflib
+import html
 
 from paperverifier.feedback.applier import AppliedFeedback
 
@@ -79,8 +80,8 @@ class DiffGenerator:
         str
             A self-contained HTML string with embedded styles.
         """
-        original_lines = original.splitlines()
-        modified_lines = modified.splitlines()
+        original_lines = [html.escape(line) for line in original.splitlines()]
+        modified_lines = [html.escape(line) for line in modified.splitlines()]
 
         differ = difflib.HtmlDiff(wrapcolumn=80)
         table = differ.make_table(

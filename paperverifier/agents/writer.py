@@ -8,7 +8,6 @@ voice and technical accuracy.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import structlog
@@ -17,7 +16,6 @@ from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
-from paperverifier.utils.chunking import DocumentChunk, create_document_summary
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import get_prompts
 
@@ -101,11 +99,12 @@ class WriterAgent(BaseAgent):
             response = await self._call_llm(messages)
         except Exception as exc:
             self._logger.error(
-                "writer_llm_call_failed",
+                "fix_generation_failed",
                 finding_id=finding.id,
                 error=str(exc),
+                exc_info=True,
             )
-            return f"[Fix generation failed: {exc}]"
+            return "[Fix generation failed. Please try again later.]"
 
         # Parse the response to extract the suggestion
         return self._extract_fix(response.content)

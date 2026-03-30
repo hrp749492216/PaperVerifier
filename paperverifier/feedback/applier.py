@@ -358,9 +358,9 @@ class FeedbackApplier:
                 if idx != -1:
                     return idx
 
-            # Unknown position: sort to the front of the descending list
-            # so these items appear last and are applied first.
-            return -1
+            # Unknown position: use string search which adapts to current
+            # text state, so apply these last (after known-position items).
+            return 0
 
         return sorted(items, key=_sort_key, reverse=True)
 
@@ -435,11 +435,12 @@ class FeedbackApplier:
             if idx != -1:
                 return idx, idx + len(finding.segment_text), finding.segment_text
 
-        # Strategy 3: use metadata start/end if available.
+        # Strategy 3: use metadata start/end if available (with bounds check).
         start_meta = finding.metadata.get("start_char")
         end_meta = finding.metadata.get("end_char")
         if isinstance(start_meta, int) and isinstance(end_meta, int):
-            return start_meta, end_meta, current_text[start_meta:end_meta]
+            if 0 <= start_meta < end_meta <= len(current_text):
+                return start_meta, end_meta, current_text[start_meta:end_meta]
 
         return -1, -1, None
 

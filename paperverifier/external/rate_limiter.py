@@ -21,6 +21,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
 import structlog
@@ -67,14 +68,18 @@ class AsyncRateLimiter:
     async def acquire(self) -> None:
         """Block until both concurrency and rate constraints are met."""
         await self._semaphore.acquire()
+        sleep_time = 0.0
         async with self._lock:
             now = time.monotonic()
             # Discard timestamps outside the 1-second sliding window.
             self._timestamps = [t for t in self._timestamps if now - t < 1.0]
             if len(self._timestamps) >= self._rate:
                 sleep_time = 1.0 - (now - self._timestamps[0])
-                if sleep_time > 0:
-                    await asyncio.sleep(sleep_time)
+                if sleep_time <= 0:
+                    sleep_time = 0.0
+        if sleep_time > 0:
+            await asyncio.sleep(sleep_time)
+        async with self._lock:
             self._timestamps.append(time.monotonic())
 
     def release(self) -> None:
@@ -130,6 +135,7 @@ class CircuitBreaker:
         self.recovery_timeout: float = recovery_timeout
         self.last_failure_time: float = 0.0
         self.name: str = name
+        self._lock = threading.Lock()
 
     # -- Query -------------------------------------------------------------
 
@@ -141,32 +147,34 @@ class CircuitBreaker:
           elapsed, at which point the state transitions to HALF_OPEN.
         * **HALF_OPEN** -- one probe request is allowed.
         """
-        if self.state == self.CLOSED:
-            return True
-
-        if self.state == self.OPEN:
-            elapsed = time.monotonic() - self.last_failure_time
-            if elapsed >= self.recovery_timeout:
-                logger.info(
-                    "circuit_breaker_half_open",
-                    name=self.name,
-                    elapsed=round(elapsed, 1),
-                )
-                self.state = self.HALF_OPEN
+        with self._lock:
+            if self.state == self.CLOSED:
                 return True
-            return False
 
-        # HALF_OPEN -- allow the single probe request.
-        return True
+            if self.state == self.OPEN:
+                elapsed = time.monotonic() - self.last_failure_time
+                if elapsed >= self.recovery_timeout:
+                    logger.info(
+                        "circuit_breaker_half_open",
+                        name=self.name,
+                        elapsed=round(elapsed, 1),
+                    )
+                    self.state = self.HALF_OPEN
+                    return True
+                return False
+
+            # HALF_OPEN -- allow the single probe request.
+            return True
 
     # -- Feedback ----------------------------------------------------------
 
     def record_success(self) -> None:
         """Record a successful request.  Resets the breaker to CLOSED."""
-        if self.state != self.CLOSED:
-            logger.info("circuit_breaker_closed", name=self.name)
-        self.state = self.CLOSED
-        self.failure_count = 0
+        with self._lock:
+            if self.state != self.CLOSED:
+                logger.info("circuit_breaker_closed", name=self.name)
+            self.state = self.CLOSED
+            self.failure_count = 0
 
     def record_failure(self) -> None:
         """Record a failed request.
@@ -175,21 +183,22 @@ class CircuitBreaker:
         :pyattr:`failure_threshold` the breaker trips to OPEN.  In
         HALF_OPEN state, any failure immediately re-opens the breaker.
         """
-        self.failure_count += 1
-        self.last_failure_time = time.monotonic()
+        with self._lock:
+            self.failure_count += 1
+            self.last_failure_time = time.monotonic()
 
-        if self.state == self.HALF_OPEN:
-            self.state = self.OPEN
-            logger.warning(
-                "circuit_breaker_reopened",
-                name=self.name,
-                failure_count=self.failure_count,
-            )
-        elif self.failure_count >= self.failure_threshold:
-            self.state = self.OPEN
-            logger.warning(
-                "circuit_breaker_opened",
-                name=self.name,
-                failure_count=self.failure_count,
-                recovery_timeout=self.recovery_timeout,
-            )
+            if self.state == self.HALF_OPEN:
+                self.state = self.OPEN
+                logger.warning(
+                    "circuit_breaker_reopened",
+                    name=self.name,
+                    failure_count=self.failure_count,
+                )
+            elif self.failure_count >= self.failure_threshold:
+                self.state = self.OPEN
+                logger.warning(
+                    "circuit_breaker_opened",
+                    name=self.name,
+                    failure_count=self.failure_count,
+                    recovery_timeout=self.recovery_timeout,
+                )

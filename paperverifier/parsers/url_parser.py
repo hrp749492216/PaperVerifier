@@ -276,11 +276,16 @@ class URLParser(BaseParser):
 
                 # Check Content-Length header before buffering body.
                 cl = response.headers.get("content-length")
-                if cl and int(cl) > _MAX_DOWNLOAD_SIZE:
-                    raise InputValidationError(
-                        f"File too large: {int(cl):,} bytes "
-                        f"(max {_MAX_DOWNLOAD_SIZE:,})."
-                    )
+                if cl:
+                    try:
+                        cl_int = int(cl)
+                    except ValueError:
+                        cl_int = 0
+                    if cl_int > _MAX_DOWNLOAD_SIZE:
+                        raise InputValidationError(
+                            f"File too large: {cl_int:,} bytes "
+                            f"(max {_MAX_DOWNLOAD_SIZE:,})."
+                        )
 
                 content_type = response.headers.get("content-type", "")
                 content_type = content_type.split(";")[0].strip()
@@ -363,7 +368,14 @@ class URLParser(BaseParser):
         if content[:4] == b"%PDF":
             return "pdf"
         if content[:2] == b"PK":
-            return "docx"  # ZIP-based format (DOCX).
+            # Verify it's actually a DOCX (not just any ZIP file).
+            import zipfile, io
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                    if "word/document.xml" in zf.namelist():
+                        return "docx"
+            except (zipfile.BadZipFile, Exception):
+                pass  # Not a valid ZIP or not a DOCX.
 
         # Last resort: if it looks like text, use text parser.
         if ct.startswith("text/") or self._looks_like_text(content[:1024]):

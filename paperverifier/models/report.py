@@ -87,11 +87,17 @@ class VerificationReport(BaseModel):
         """Estimate the USD cost based on aggregated token usage.
 
         Uses approximate per-1K-token pricing:
-        - Input tokens:  $0.003 / 1K tokens
+        - Input tokens:  $0.003 / 1K tokens (roughly GPT-4o-mini rate)
         - Output tokens: $0.015 / 1K tokens
+
+        .. note::
+            This is a **rough estimate** only. Actual costs vary significantly
+            by provider, model, and pricing tier.  Override or replace this
+            method when accurate billing data is available.
         """
         input_tokens = self.total_tokens.get("input_tokens", 0)
         output_tokens = self.total_tokens.get("output_tokens", 0)
+        # Rough estimate using mid-range pricing. Actual costs vary by provider/model.
         cost = (input_tokens / 1000.0) * 0.003 + (output_tokens / 1000.0) * 0.015
         self.estimated_cost_usd = round(cost, 6)
 

@@ -7,17 +7,15 @@ citations, or logical reasoning within the paper.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import structlog
 
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument, Section
+from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.utils.chunking import (
-    DocumentChunk,
     chunk_document,
     create_document_summary,
 )
@@ -26,20 +24,6 @@ from paperverifier.utils.prompts import get_prompts
 from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
-
-# Sections that typically contain verifiable claims
-_CLAIM_BEARING_TITLES = {
-    "introduction",
-    "abstract",
-    "results",
-    "discussion",
-    "experiments",
-    "evaluation",
-    "analysis",
-    "conclusion",
-    "conclusions",
-    "findings",
-}
 
 
 def _format_references_list(document: ParsedDocument) -> str:
@@ -67,15 +51,6 @@ def _format_references_list(document: ParsedDocument) -> str:
         lines.append(f"  - {line}")
 
     return "\n".join(lines)
-
-
-def _is_claim_bearing_section(section: Section) -> bool:
-    """Check whether a section is likely to contain verifiable claims."""
-    title_lower = section.title.lower().strip()
-    for keyword in _CLAIM_BEARING_TITLES:
-        if keyword in title_lower:
-            return True
-    return False
 
 
 class ClaimVerificationAgent(BaseAgent):

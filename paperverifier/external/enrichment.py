@@ -129,7 +129,7 @@ async def _lookup_reference(
             return result
 
     # Strategy 2: Title search via Semantic Scholar
-    search_title = ref.title or ref.raw_text[:120]
+    search_title = ref.title or (ref.raw_text[:120] if ref.raw_text else "")
     if search_title:
         s2_papers = await s2.search_paper(search_title)
         for paper in s2_papers:
@@ -167,8 +167,10 @@ def _titles_match(query: str, candidate: str) -> bool:
     c_words = set(c.split())
     if not q_words:
         return False
-    overlap = len(q_words & c_words) / len(q_words)
-    return overlap >= 0.75
+    intersection = len(q_words & c_words)
+    union = len(q_words | c_words)
+    jaccard = intersection / union if union else 0.0
+    return jaccard >= 0.60
 
 
 def _parse_crossref(data: dict[str, Any], ref: Reference) -> dict[str, Any]:

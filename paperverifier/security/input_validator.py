@@ -42,6 +42,10 @@ BLOCKED_IP_RANGES = [
     ipaddress.ip_network("fe80::/10"),  # Link-local IPv6
     ipaddress.ip_network("::ffff:0:0/96"),  # IPv4-mapped IPv6 (HIGH-S2)
     ipaddress.ip_network("100.64.0.0/10"),  # Carrier-grade NAT
+    ipaddress.ip_network("::/128"),          # Unspecified IPv6
+    ipaddress.ip_network("2001:db8::/32"),   # Documentation range
+    ipaddress.ip_network("ff00::/8"),        # Multicast
+    ipaddress.ip_network("2002::/16"),       # 6to4 (can tunnel to internal)
 ]
 
 # Magic bytes for file-type verification.
@@ -178,6 +182,9 @@ def validate_github_url(url: str) -> str:
     """
     if not url or not isinstance(url, str):
         raise InputValidationError("GitHub URL must be a non-empty string.")
+
+    # Also validate for SSRF protection (DNS resolution + IP blocking).
+    validate_url(url)
 
     # Strip common suffixes for normalization before pattern matching.
     normalized = url.rstrip("/")

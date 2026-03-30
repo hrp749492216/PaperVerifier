@@ -261,7 +261,7 @@ class LaTeXParser(BaseParser):
     # Input/Include resolution
     # ------------------------------------------------------------------
 
-    def _resolve_inputs(self, text: str, base_dir: Path, depth: int) -> str:
+    def _resolve_inputs(self, text: str, base_dir: Path, depth: int, root_dir: Path | None = None) -> str:
         """Recursively resolve ``\\input{}`` and ``\\include{}`` directives.
 
         Prevents infinite recursion with a depth limit of 10.
@@ -270,10 +270,16 @@ class LaTeXParser(BaseParser):
             text: LaTeX source text.
             base_dir: Directory to resolve relative paths from.
             depth: Current recursion depth.
+            root_dir: Original root directory for security validation.
+                Preserved across recursive calls to prevent chained
+                includes from escaping the project root.
 
         Returns:
             Text with ``\\input{}``/``\\include{}`` replaced by file contents.
         """
+        if root_dir is None:
+            root_dir = base_dir
+
         if depth > 10:
             logger.warning("latex_input_depth_exceeded", depth=depth)
             return text
@@ -287,9 +293,9 @@ class LaTeXParser(BaseParser):
             input_path = base_dir / filename
             resolved = input_path.resolve()
 
-            # Security: ensure resolved path is within base_dir.
+            # Security: ensure resolved path is within root_dir.
             try:
-                resolved.relative_to(base_dir.resolve())
+                resolved.relative_to(root_dir.resolve())
             except ValueError:
                 logger.warning(
                     "latex_input_outside_basedir",
@@ -304,7 +310,7 @@ class LaTeXParser(BaseParser):
 
             try:
                 included = resolved.read_text(encoding="utf-8", errors="replace")
-                return self._resolve_inputs(included, resolved.parent, depth + 1)
+                return self._resolve_inputs(included, resolved.parent, depth + 1, root_dir=root_dir)
             except Exception as exc:
                 logger.warning(
                     "latex_input_read_error",

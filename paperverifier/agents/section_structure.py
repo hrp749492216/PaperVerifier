@@ -16,7 +16,6 @@ from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument, Section
 from paperverifier.models.findings import Finding
 from paperverifier.utils.chunking import (
-    DocumentChunk,
     chunk_document,
     create_document_summary,
 )

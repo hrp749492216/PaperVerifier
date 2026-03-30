@@ -90,6 +90,8 @@ for provider in LLMProvider:
                         client = st.session_state.get("llm_client")
                         if client is not None:
                             client.set_api_key(provider, key_input.strip())
+                        # Clear the plaintext key from session state
+                        st.session_state[f"api_key_{provider.value}"] = ""
                         st.toast(f"API key for {spec.display_name} saved to keyring.", icon="\u2705")
                         st.rerun()
                     except Exception as exc:

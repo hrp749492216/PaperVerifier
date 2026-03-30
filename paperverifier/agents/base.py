@@ -196,7 +196,20 @@ class BaseAgent:
         severity_str = str(data.get("severity", "info")).lower().strip()
 
         category = _CATEGORY_MAP.get(category_str, FindingCategory.GENERAL)
+        if category_str not in _CATEGORY_MAP:
+            self._logger.debug(
+                "finding_category_fallback",
+                raw_value=category_str,
+                default="GENERAL",
+            )
+
         severity = _SEVERITY_MAP.get(severity_str, Severity.INFO)
+        if severity_str not in _SEVERITY_MAP:
+            self._logger.debug(
+                "finding_severity_fallback",
+                raw_value=severity_str,
+                default="INFO",
+            )
 
         # Normalise evidence to a list of strings
         evidence_raw = data.get("evidence", [])
@@ -243,6 +256,9 @@ class BaseAgent:
         :meth:`_run_analysis` instead of this method.  Partial failures
         are caught and recorded in the report rather than propagating.
         """
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+
         start_time = time.monotonic()
         findings: list[Finding] = []
         status = "completed"

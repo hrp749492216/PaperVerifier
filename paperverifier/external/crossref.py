@@ -61,6 +61,7 @@ class CrossRefClient:
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
+        self._session_lock = asyncio.Lock()
 
     # -- Async context manager ---------------------------------------------
 
@@ -74,16 +75,17 @@ class CrossRefClient:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Return (or lazily create) the shared :class:`aiohttp.ClientSession`."""
-        if self._session is None or self._session.closed:
-            headers: dict[str, str] = {
-                "User-Agent": f"PaperVerifier/0.1 (mailto:{self._email})"
-                if self._email
-                else "PaperVerifier/0.1",
-            }
-            self._session = aiohttp.ClientSession(
-                headers=headers, timeout=self._timeout,
-            )
-        return self._session
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                headers: dict[str, str] = {
+                    "User-Agent": f"PaperVerifier/0.1 (mailto:{self._email})"
+                    if self._email
+                    else "PaperVerifier/0.1",
+                }
+                self._session = aiohttp.ClientSession(
+                    headers=headers, timeout=self._timeout,
+                )
+            return self._session
 
     # -- Low-level request -------------------------------------------------
 

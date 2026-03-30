@@ -10,6 +10,7 @@ defined in :mod:`paperverifier.llm.exceptions`.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -170,7 +171,7 @@ class UnifiedLLMClient:
     def _get_openai_client(self, base_url: str | None, api_key: str) -> Any:
         """Return a cached :class:`openai.AsyncOpenAI` client."""
         # Use hash of API key rather than raw key as cache key (MED-S2).
-        cache_key = (base_url, str(hash(api_key)))
+        cache_key = (base_url, hashlib.sha256(api_key.encode()).hexdigest())
         if cache_key not in self._openai_clients:
             import openai  # noqa: PLC0415
 
@@ -203,7 +204,7 @@ class UnifiedLLMClient:
                 chat_messages.append({"role": msg.role, "content": msg.content})
 
         # Cache Anthropic clients for connection reuse (HIGH-I1).
-        cache_key = str(hash(api_key))
+        cache_key = hashlib.sha256(api_key.encode()).hexdigest()
         if cache_key not in self._anthropic_clients:
             self._anthropic_clients[cache_key] = anthropic.AsyncAnthropic(api_key=api_key)
         client = self._anthropic_clients[cache_key]

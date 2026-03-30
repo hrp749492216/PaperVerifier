@@ -13,10 +13,9 @@ import structlog
 
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument, Section
+from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.utils.chunking import (
-    DocumentChunk,
     chunk_document,
     create_document_summary,
 )
@@ -25,36 +24,6 @@ from paperverifier.utils.prompts import get_prompts
 from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
-
-
-def _extract_section_texts(document: ParsedDocument) -> list[tuple[str, str]]:
-    """Extract text for each section, including subsections.
-
-    Returns a list of (section_header, section_text) tuples.  If the
-    document has no sections, the full text is returned as a single entry.
-    """
-    if not document.sections:
-        return [("Full Document", document.full_text)]
-
-    entries: list[tuple[str, str]] = []
-    for sec in document.sections:
-        header = f"[{sec.id}] {sec.title}"
-        text = _build_section_text(sec)
-        if text.strip():
-            entries.append((header, text))
-
-    return entries if entries else [("Full Document", document.full_text)]
-
-
-def _build_section_text(section: Section) -> str:
-    """Build the full text for a section including subsections."""
-    parts: list[str] = []
-    for para in section.paragraphs:
-        parts.append(para.raw_text)
-    for sub in section.subsections:
-        parts.append(f"\n### [{sub.id}] {sub.title}")
-        parts.append(_build_section_text(sub))
-    return "\n\n".join(parts)
 
 
 class LanguageFlowAgent(BaseAgent):

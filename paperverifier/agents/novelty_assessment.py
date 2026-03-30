@@ -8,7 +8,6 @@ novelty score.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import structlog
@@ -18,7 +17,6 @@ from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.utils.chunking import (
-    DocumentChunk,
     chunk_document,
     create_document_summary,
 )

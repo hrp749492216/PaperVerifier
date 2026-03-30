@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 import structlog
+import yaml
 
 from paperverifier.models.document import (
     ParsedDocument,
@@ -128,20 +129,14 @@ class MarkdownParser(BaseParser):
         fm_raw = fm_match.group(1)
         remaining = text[fm_match.end():]
 
-        # Simple key-value extraction (avoids requiring PyYAML).
-        metadata: dict[str, object] = {}
-        for line in fm_raw.split("\n"):
-            line = line.strip()
-            if ":" in line:
-                key, _, value = line.partition(":")
-                key = key.strip().lower()
-                value = value.strip().strip('"').strip("'")
-                if value.startswith("[") and value.endswith("]"):
-                    # Simple list parsing.
-                    items = value[1:-1].split(",")
-                    metadata[key] = [i.strip().strip('"').strip("'") for i in items]
-                else:
-                    metadata[key] = value
+        try:
+            meta = yaml.safe_load(fm_raw)
+            if isinstance(meta, dict):
+                metadata = {str(k): v for k, v in meta.items()}
+            else:
+                metadata = {}
+        except yaml.YAMLError:
+            metadata = {}
 
         return metadata, remaining
 

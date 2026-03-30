@@ -179,41 +179,42 @@ class PDFParser(BaseParser):
             logger.warning("pdfplumber_open_failed", error=str(exc))
             return None, [], {}
 
-        metadata: dict[str, Any] = {}
         try:
-            raw_meta = pdf.metadata or {}
-            for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
-                val = raw_meta.get(key)
-                if val:
-                    metadata[key.lower()] = val
-        except Exception:
-            pass
-
-        # Enforce page limit (MED-S4).
-        from paperverifier.config import get_settings
-        max_pages = get_settings().max_document_pages
-        pages_to_process = pdf.pages[:max_pages]
-        if len(pdf.pages) > max_pages:
-            logger.warning(
-                "pdf_page_limit",
-                total_pages=len(pdf.pages),
-                max_pages=max_pages,
-            )
-
-        text_parts: list[str] = []
-        for page in pages_to_process:
+            metadata: dict[str, Any] = {}
             try:
-                page_text = page.extract_text()
-                if page_text:
-                    text_parts.append(page_text)
-            except Exception as exc:
+                raw_meta = pdf.metadata or {}
+                for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
+                    val = raw_meta.get(key)
+                    if val:
+                        metadata[key.lower()] = val
+            except Exception:
+                pass
+
+            # Enforce page limit (MED-S4).
+            from paperverifier.config import get_settings
+            max_pages = get_settings().max_document_pages
+            pages_to_process = pdf.pages[:max_pages]
+            if len(pdf.pages) > max_pages:
                 logger.warning(
-                    "pdfplumber_page_error",
-                    page=page.page_number,
-                    error=str(exc),
+                    "pdf_page_limit",
+                    total_pages=len(pdf.pages),
+                    max_pages=max_pages,
                 )
 
-        pdf.close()
+            text_parts: list[str] = []
+            for page in pages_to_process:
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(page_text)
+                except Exception as exc:
+                    logger.warning(
+                        "pdfplumber_page_error",
+                        page=page.page_number,
+                        error=str(exc),
+                    )
+        finally:
+            pdf.close()
 
         if not text_parts:
             return None, [], metadata

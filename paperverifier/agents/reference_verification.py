@@ -16,7 +16,7 @@ from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument, Reference
 from paperverifier.models.findings import ConfidenceLevel, Finding
-from paperverifier.utils.chunking import DocumentChunk, create_document_summary
+from paperverifier.utils.chunking import create_document_summary
 from paperverifier.utils.prompts import get_prompts
 
 from paperverifier.agents.base import BaseAgent

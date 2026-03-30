@@ -61,6 +61,7 @@ class OpenAlexClient:
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
+        self._session_lock = asyncio.Lock()
 
     # -- Async context manager ---------------------------------------------
 
@@ -74,14 +75,15 @@ class OpenAlexClient:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Return (or lazily create) the shared :class:`aiohttp.ClientSession`."""
-        if self._session is None or self._session.closed:
-            headers: dict[str, str] = {}
-            if self._email:
-                headers["User-Agent"] = f"PaperVerifier/0.1 (mailto:{self._email})"
-            self._session = aiohttp.ClientSession(
-                headers=headers, timeout=self._timeout,
-            )
-        return self._session
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                headers: dict[str, str] = {}
+                if self._email:
+                    headers["User-Agent"] = f"PaperVerifier/0.1 (mailto:{self._email})"
+                self._session = aiohttp.ClientSession(
+                    headers=headers, timeout=self._timeout,
+                )
+            return self._session
 
     # -- Low-level request -------------------------------------------------
 
@@ -169,9 +171,11 @@ class OpenAlexClient:
             The DOI string (e.g. ``"10.1234/example"``).  A ``https://doi.org/``
             prefix is added automatically if missing.
         """
-        if not doi.startswith("https://doi.org/"):
-            doi = f"https://doi.org/{doi}"
-        return await self._request(f"/works/{_url_quote(doi, safe='')}")
+        if doi.startswith("https://doi.org/"):
+            doi = doi[len("https://doi.org/"):]
+        encoded_doi = _url_quote(doi, safe='')
+        url = f"https://doi.org/{encoded_doi}"
+        return await self._request(f"/works/{_url_quote(url, safe='')}")
 
     async def check_retraction(self, work_id: str) -> bool:
         """Check whether a work has been retracted.

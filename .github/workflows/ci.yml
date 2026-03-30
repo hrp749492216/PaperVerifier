@@ -35,6 +35,11 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
+      - name: Type check
+        run: |
+          pip install mypy types-PyYAML
+          mypy paperverifier --ignore-missing-imports || true
+
   test:
     name: Test
     runs-on: ubuntu-latest

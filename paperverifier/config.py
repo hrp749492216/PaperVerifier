@@ -195,7 +195,7 @@ def _redact_sensitive_keys(
         key_lower = key.lower()
         if key_lower in _SENSITIVE_KEYS or any(
             fragment in key_lower
-            for fragment in ("secret", "password", "api_key", "authorization")
+            for fragment in ("secret", "password", "api_key", "authorization", "access_token", "refresh_token", "auth_token", "bearer_token")
         ):
             # Do NOT match "token" as a substring -- it would redact
             # "input_tokens" and "output_tokens" metrics (HIGH-I4).

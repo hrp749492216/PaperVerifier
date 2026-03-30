@@ -13,7 +13,6 @@ The :class:`AgentOrchestrator` coordinates the full verification pipeline:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from collections import defaultdict
 from typing import Any, Awaitable, Callable
@@ -461,18 +460,19 @@ class AgentOrchestrator:
             },
         )
 
-        # Replace raw agent findings with consolidated ones to avoid
-        # double-counting (CRIT-4).  When the orchestrator produced consolidated
-        # findings, clear the per-agent findings and use only the consolidated set.
+        # Store consolidated findings in a dedicated orchestrator report.
+        # Per-agent findings are preserved for auditability and debugging.
         if consolidated_findings:
-            for ar in report.agent_reports:
-                ar.findings = []
             orch_report = AgentReport(
                 agent_role=AgentRole.ORCHESTRATOR.value,
                 status="completed",
                 findings=consolidated_findings,
             )
             report.agent_reports.append(orch_report)
+            # Use only the consolidated findings for counts/feedback to
+            # avoid double-counting, while individual agent findings
+            # remain accessible via each agent_report.
+            report._consolidated_findings = consolidated_findings
 
         # Compute summary statistics, cost estimate, and feedback items
         report.compute_severity_counts()

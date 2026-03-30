@@ -727,6 +727,10 @@ def _parse_item_numbers(items_str: str) -> list[int]:
                 raise ValueError(
                     f"Invalid range: '{part}' (start > end)"
                 )
+            if end - start > 10_000:
+                raise ValueError(
+                    f"Range too large: '{part}' (max 10,000 items)"
+                )
             result.extend(range(start, end + 1))
         else:
             try:

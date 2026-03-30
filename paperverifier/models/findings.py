@@ -49,7 +49,7 @@ class Finding(BaseModel):
     feedback application.
     """
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:12])
     agent_role: str
     category: FindingCategory
     severity: Severity

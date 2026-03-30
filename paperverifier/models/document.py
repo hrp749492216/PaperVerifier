@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 class Reference(BaseModel):
     """A bibliographic reference cited in the document."""
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = Field(default_factory=lambda: str(uuid.uuid4())[:12])
     raw_text: str
     title: str | None = None
     authors: list[str] = Field(default_factory=list)

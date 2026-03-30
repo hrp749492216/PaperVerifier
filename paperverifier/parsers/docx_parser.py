@@ -25,6 +25,8 @@ from paperverifier.security.input_validator import (
 
 logger = structlog.get_logger(__name__)
 
+_MAX_DOCX_SIZE = 100 * 1024 * 1024  # 100 MB
+
 # Heading style names used by python-docx.
 _HEADING_STYLES = {
     "Heading 1": 1,
@@ -69,6 +71,11 @@ class DOCXParser(BaseParser):
         if isinstance(source, bytes):
             if len(source) == 0:
                 raise InputValidationError("DOCX file is empty.")
+            if len(source) > _MAX_DOCX_SIZE:
+                raise InputValidationError(
+                    f"DOCX file too large: {len(source):,} bytes exceeds "
+                    f"maximum of {_MAX_DOCX_SIZE:,} bytes."
+                )
             # python-docx can open from a file-like object.
             import io
 
@@ -81,6 +88,11 @@ class DOCXParser(BaseParser):
 
             if not path.exists():
                 raise InputValidationError(f"DOCX file not found: {source}")
+            if path.stat().st_size > _MAX_DOCX_SIZE:
+                raise InputValidationError(
+                    f"DOCX file too large: {path.stat().st_size:,} bytes exceeds "
+                    f"maximum of {_MAX_DOCX_SIZE:,} bytes."
+                )
             source_path = str(path)
             doc = docx.Document(str(path))
 

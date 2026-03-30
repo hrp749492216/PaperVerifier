@@ -198,6 +198,9 @@ def _sliding_window_chunks(
         Ordered list of chunks (``chunk_index`` and ``total_chunks`` are
         set by the caller).
     """
+    # Guard against infinite loop when overlap is too large.
+    if overlap_chars >= max_chars:
+        overlap_chars = max_chars // 2
     chunks: list[DocumentChunk] = []
     pos = 0
     while pos < len(text):

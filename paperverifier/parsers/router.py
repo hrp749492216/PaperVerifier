@@ -148,7 +148,14 @@ class InputRouter:
         if content[:4] == b"%PDF":
             return "pdf"
         if content[:2] == b"PK":
-            return "docx"
+            # Verify it's actually a DOCX (not just any ZIP file).
+            import zipfile, io
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                    if "word/document.xml" in zf.namelist():
+                        return "docx"
+            except (zipfile.BadZipFile, Exception):
+                pass  # Not a valid ZIP or not a DOCX.
         if content[:4] == b"\xd0\xcf\x11\xe0":
             return "docx"  # Legacy .doc (OLE2).
 

@@ -6,13 +6,17 @@ preview, and launches the verification pipeline via :class:`AgentOrchestrator`.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 import threading
+import uuid as _uuid
 from pathlib import Path
 
 import streamlit as st
 
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -117,7 +121,9 @@ with tab_upload:
                     )
 
                 except Exception as exc:
-                    st.error(f"Failed to parse document: {exc}")
+                    error_id = str(_uuid.uuid4())[:8]
+                    logger.error("parse_failed", exc_info=True, extra={"error_id": error_id})
+                    st.error(f"Failed to parse document. Error ID: {error_id}")
                     status.update(label="Parsing failed", state="error")
                 finally:
                     # MED-U2: Always clean up temp file, even on failure
@@ -135,6 +141,16 @@ with tab_url:
 
     if paper_url:
         if st.button("Fetch & Parse", key="btn_parse_url"):
+            from paperverifier.security.input_validator import validate_url, InputValidationError
+
+            try:
+                validate_url(paper_url)
+            except InputValidationError as exc:
+                error_id = str(_uuid.uuid4())[:8]
+                logger.error("invalid_url", exc_info=True, extra={"error_id": error_id})
+                st.error(f"Invalid URL. Error ID: {error_id}")
+                st.stop()
+
             with st.status("Fetching and parsing...", expanded=True) as status:
                 try:
                     from paperverifier.parsers.router import InputRouter
@@ -156,7 +172,9 @@ with tab_url:
                     )
 
                 except Exception as exc:
-                    st.error(f"Failed to fetch or parse URL: {exc}")
+                    error_id = str(_uuid.uuid4())[:8]
+                    logger.error("url_parse_failed", exc_info=True, extra={"error_id": error_id})
+                    st.error(f"Failed to fetch or parse URL. Error ID: {error_id}")
                     status.update(label="Fetch failed", state="error")
 
 # -- Tab 3: GitHub --------------------------------------------------------
@@ -170,6 +188,16 @@ with tab_github:
 
     if github_url:
         if st.button("Clone & Parse", key="btn_parse_github"):
+            from paperverifier.security.input_validator import validate_github_url, InputValidationError
+
+            try:
+                validate_github_url(github_url)
+            except InputValidationError as exc:
+                error_id = str(_uuid.uuid4())[:8]
+                logger.error("invalid_github_url", exc_info=True, extra={"error_id": error_id})
+                st.error(f"Invalid GitHub URL. Error ID: {error_id}")
+                st.stop()
+
             with st.status("Cloning and parsing...", expanded=True) as status:
                 try:
                     from paperverifier.parsers.router import InputRouter
@@ -191,7 +219,9 @@ with tab_github:
                     )
 
                 except Exception as exc:
-                    st.error(f"Failed to clone or parse repository: {exc}")
+                    error_id = str(_uuid.uuid4())[:8]
+                    logger.error("github_parse_failed", exc_info=True, extra={"error_id": error_id})
+                    st.error(f"Failed to clone or parse repository. Error ID: {error_id}")
                     status.update(label="Clone failed", state="error")
 
 
@@ -422,19 +452,15 @@ if doc is not None:
         except Exception as exc:
             # Show only a sanitized error message to users; log full
             # traceback server-side only (Codex-2).
-            import logging
-            import traceback
-            import uuid
-
-            error_id = uuid.uuid4().hex[:8]
-            logging.getLogger(__name__).error(
-                "verification_failed error_id=%s\n%s",
+            error_id = str(_uuid.uuid4())[:8]
+            logger.error(
+                "verification_failed error_id=%s",
                 error_id,
-                traceback.format_exc(),
+                exc_info=True,
             )
             st.error(
-                f"Verification failed: {exc}\n\n"
-                f"If this persists, contact support with error ID: `{error_id}`"
+                f"Verification failed. Error ID: {error_id}\n\n"
+                "If this persists, contact support with the error ID above."
             )
 
 elif st.session_state.get("parsed_document") is None:

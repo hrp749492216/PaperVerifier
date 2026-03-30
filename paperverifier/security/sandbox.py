@@ -117,6 +117,10 @@ async def run_sandboxed(
     except asyncio.TimeoutError:
         # Kill the entire process group.
         _kill_process_group(proc)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass  # Process didn't exit; it will become an orphan.
         logger.warning("sandbox_timeout", cmd=cmd[:3], timeout=timeout)
         raise SandboxTimeoutError(
             f"Command timed out after {timeout}s: {' '.join(cmd[:3])}"
@@ -128,7 +132,7 @@ async def run_sandboxed(
 
     result = subprocess.CompletedProcess(
         args=cmd,
-        returncode=proc.returncode or 0,
+        returncode=proc.returncode if proc.returncode is not None else -1,
         stdout=stdout_str,
         stderr=stderr_str,
     )
@@ -330,12 +334,24 @@ def _validate_clone_contents(clone_dir: Path) -> None:
 def cleanup_temp_dir(path: Path) -> None:
     """Safely remove a temporary directory and all its contents.
 
-    Logs a warning instead of raising if removal fails.
+    Only removes directories under the system temp directory or that match
+    the ``pv_clone_`` naming convention.  Logs a warning instead of raising
+    if removal fails.
     """
     try:
-        if path.exists():
-            shutil.rmtree(path, ignore_errors=False)
-            logger.debug("temp_dir_cleaned", path=str(path))
+        if not path.exists():
+            return
+        resolved = path.resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        if not (str(resolved).startswith(str(temp_root)) or resolved.name.startswith("pv_clone_")):
+            logger.error(
+                "cleanup_refused_not_temp_dir",
+                path=str(path),
+                resolved=str(resolved),
+            )
+            return
+        shutil.rmtree(path, ignore_errors=False)
+        logger.debug("temp_dir_cleaned", path=str(path))
     except OSError:
         logger.warning("temp_dir_cleanup_failed", path=str(path), exc_info=True)
 

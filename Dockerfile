@@ -19,14 +19,13 @@ WORKDIR /app
 
 # Install Python dependencies first (for better layer caching)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -e ".[ui]" || true
+RUN pip install --no-cache-dir --upgrade pip
 
 # Copy project source
 COPY . .
 
 # Install the project itself
-RUN pip install --no-cache-dir -e ".[ui]"
+RUN pip install --no-cache-dir ".[ui]"
 
 # Create temp directories and set permissions
 RUN mkdir -p /app/temp_uploads /app/logs \

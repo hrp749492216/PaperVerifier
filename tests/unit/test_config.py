@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+import pytest
+
 import paperverifier.config as config_module
 from paperverifier.config import AppSettings, _redact_sensitive_keys, get_settings
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings():
+    """Save and restore config singleton between tests."""
+    old = config_module._settings
+    config_module._settings = None
+    yield
+    config_module._settings = old
 
 
 # ---------------------------------------------------------------------------
@@ -44,19 +55,15 @@ class TestGetSettingsSingleton:
     """get_settings() should return a cached singleton."""
 
     def test_returns_app_settings_instance(self) -> None:
-        # Reset singleton to ensure a fresh start
-        config_module._settings = None
         settings = get_settings()
         assert isinstance(settings, AppSettings)
 
     def test_returns_same_instance(self) -> None:
-        config_module._settings = None
         s1 = get_settings()
         s2 = get_settings()
         assert s1 is s2
 
     def test_reset_forces_new_instance(self) -> None:
-        config_module._settings = None
         s1 = get_settings()
         config_module._settings = None
         s2 = get_settings()

@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import urllib.parse
 from typing import Any
 
 import aiohttp
@@ -82,6 +83,7 @@ class SemanticScholarClient:
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
+        self._session_lock = asyncio.Lock()
 
     # -- Async context manager ---------------------------------------------
 
@@ -95,16 +97,17 @@ class SemanticScholarClient:
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """Return (or lazily create) the shared :class:`aiohttp.ClientSession`."""
-        if self._session is None or self._session.closed:
-            headers: dict[str, str] = {
-                "User-Agent": "PaperVerifier/0.1",
-            }
-            if self._api_key:
-                headers["x-api-key"] = self._api_key
-            self._session = aiohttp.ClientSession(
-                headers=headers, timeout=self._timeout,
-            )
-        return self._session
+        async with self._session_lock:
+            if self._session is None or self._session.closed:
+                headers: dict[str, str] = {
+                    "User-Agent": "PaperVerifier/0.1",
+                }
+                if self._api_key:
+                    headers["x-api-key"] = self._api_key
+                self._session = aiohttp.ClientSession(
+                    headers=headers, timeout=self._timeout,
+                )
+            return self._session
 
     # -- Low-level request -------------------------------------------------
 
@@ -207,7 +210,7 @@ class SemanticScholarClient:
         Returns the paper metadata dict, or ``None`` on failure / not found.
         """
         return await self._request(
-            f"/paper/{paper_id}",
+            f"/paper/{urllib.parse.quote(paper_id, safe='')}",
             params={"fields": _DEFAULT_PAPER_FIELDS},
         )
 
@@ -229,7 +232,7 @@ class SemanticScholarClient:
         """
         limit = min(limit, 1000)
         data = await self._request(
-            f"/paper/{paper_id}/citations",
+            f"/paper/{urllib.parse.quote(paper_id, safe='')}/citations",
             params={
                 "limit": str(limit),
                 "fields": _DEFAULT_CITATION_FIELDS,
@@ -268,7 +271,7 @@ class SemanticScholarClient:
         """
         limit = min(limit, 1000)
         data = await self._request(
-            f"/paper/{paper_id}/references",
+            f"/paper/{urllib.parse.quote(paper_id, safe='')}/references",
             params={
                 "limit": str(limit),
                 "fields": _DEFAULT_CITATION_FIELDS,
