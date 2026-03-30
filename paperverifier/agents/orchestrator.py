@@ -29,6 +29,7 @@ from paperverifier.utils.chunking import create_document_summary
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import get_prompts
 
+from paperverifier.audit import log_verification_start, log_verification_complete
 from paperverifier.agents.base import BaseAgent
 from paperverifier.agents.claim_verification import ClaimVerificationAgent
 from paperverifier.agents.hallucination_detection import HallucinationDetectionAgent
@@ -86,6 +87,7 @@ class AgentOrchestrator:
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._progress_callback = progress_callback
         self._logger = structlog.get_logger().bind(component="orchestrator")
+        # Circuit breaker state -- reset on each verify() call (HIGH-I2).
         self._failure_counts: dict[str, int] = defaultdict(int)
         self._disabled_agents: set[str] = set()
 
@@ -119,10 +121,20 @@ class AgentOrchestrator:
         pipeline_start = time.monotonic()
         external_data = external_data or {}
 
+        # Reset circuit breaker state from prior verify() calls (HIGH-I2).
+        self._failure_counts.clear()
+        self._disabled_agents.clear()
+
         self._logger.info(
             "verification_started",
             document_title=document.title,
             document_hash=document.content_hash[:12] if document.content_hash else None,
+        )
+
+        # Audit log (CRIT-11).
+        log_verification_start(
+            document_title=document.title or "(untitled)",
+            document_hash=document.content_hash or "",
         )
 
         # Step 1: Create agent instances
@@ -148,6 +160,13 @@ class AgentOrchestrator:
             agents_completed=report.agents_completed,
             agents_total=report.agents_total,
             total_findings=report.total_findings,
+        )
+
+        # Audit log (CRIT-11).
+        log_verification_complete(
+            report_id=report.id,
+            findings_count=report.total_findings,
+            duration=round(duration, 2),
         )
 
         return report
@@ -337,9 +356,10 @@ class AgentOrchestrator:
         document_summary = create_document_summary(document)
         findings_text = self._format_findings_for_synthesis(all_findings)
 
+        # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
         user_msg = user_template.format(
-            document_summary=document_summary,
-            all_findings=findings_text,
+            document_summary=document_summary.replace("{", "{{").replace("}", "}}"),
+            all_findings=findings_text.replace("{", "{{").replace("}", "}}"),
         )
 
         messages = [
@@ -441,9 +461,12 @@ class AgentOrchestrator:
             },
         )
 
-        # Replace raw findings with consolidated ones for feedback generation
+        # Replace raw agent findings with consolidated ones to avoid
+        # double-counting (CRIT-4).  When the orchestrator produced consolidated
+        # findings, clear the per-agent findings and use only the consolidated set.
         if consolidated_findings:
-            # Create a synthetic orchestrator report with consolidated findings
+            for ar in report.agent_reports:
+                ar.findings = []
             orch_report = AgentReport(
                 agent_role=AgentRole.ORCHESTRATOR.value,
                 status="completed",

@@ -40,6 +40,8 @@ BLOCKED_IP_RANGES = [
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),  # Unique local
     ipaddress.ip_network("fe80::/10"),  # Link-local IPv6
+    ipaddress.ip_network("::ffff:0:0/96"),  # IPv4-mapped IPv6 (HIGH-S2)
+    ipaddress.ip_network("100.64.0.0/10"),  # Carrier-grade NAT
 ]
 
 # Magic bytes for file-type verification.
@@ -145,8 +147,14 @@ def _check_hostname_ip(hostname: str) -> None:
 
 def _assert_ip_not_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address, hostname: str) -> None:
     """Raise if *addr* falls in any blocked range."""
+    # Unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254) to their
+    # IPv4 equivalents so they are checked against IPv4 blocklists (HIGH-S2).
+    check_addr = addr
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        check_addr = addr.ipv4_mapped
+
     for network in BLOCKED_IP_RANGES:
-        if addr in network:
+        if check_addr in network:
             logger.warning("ssrf_blocked", hostname=hostname, ip=str(addr), network=str(network))
             raise InputValidationError(
                 f"Access to private/reserved IP range is blocked "

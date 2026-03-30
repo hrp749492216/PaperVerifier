@@ -6,13 +6,11 @@ Run with: ``streamlit run streamlit_app/app.py``
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
+from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 # ---------------------------------------------------------------------------
 # Page configuration (must be the first Streamlit call)
@@ -24,16 +22,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# ---------------------------------------------------------------------------
-# Async helper
-# ---------------------------------------------------------------------------
-
-
-def run_async(coro: Any) -> Any:
-    """Run an async coroutine from synchronous Streamlit code."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
 
 
 # ---------------------------------------------------------------------------

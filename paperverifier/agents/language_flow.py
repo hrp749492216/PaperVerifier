@@ -84,6 +84,7 @@ class LanguageFlowAgent(BaseAgent):
     ) -> list[Finding]:
         """Run language/flow analysis section by section."""
         system_prompt, user_template = get_prompts(self.role.value)
+        summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
         self._logger.info(
@@ -94,7 +95,25 @@ class LanguageFlowAgent(BaseAgent):
 
         all_findings: list[Finding] = []
         for chunk in chunks:
-            user_msg = user_template.format(document_text=chunk.text)
+            # Add chunk context for partial documents so the LLM knows
+            # it is analysing a portion of the full paper.
+            if chunk.is_complete:
+                document_text = chunk.text
+            else:
+                document_text = (
+                    f"=== DOCUMENT SUMMARY (for global context) ===\n"
+                    f"{summary}\n\n"
+                    f"=== DOCUMENT CHUNK {chunk.chunk_index + 1}/{chunk.total_chunks} ===\n"
+                    f"NOTE: You are analysing chunk {chunk.chunk_index + 1} of "
+                    f"{chunk.total_chunks}. This is a partial view of the document. "
+                    f"Focus your analysis on this portion but use the summary above "
+                    f"for overall context.\n\n"
+                    f"{chunk.text}"
+                )
+
+            # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
+            safe_text = document_text.replace("{", "{{").replace("}", "}}")
+            user_msg = user_template.format(document_text=safe_text)
             messages = [
                 Message(role="system", content=system_prompt),
                 Message(role="user", content=user_msg),

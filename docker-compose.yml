@@ -1,0 +1,17 @@
+services:
+  paperverifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./paperverifier:/app/paperverifier
+      - ./streamlit_app:/app/streamlit_app
+      - ./config:/app/config
+    env_file:
+      - .env
+    environment:
+      - PAPERVERIFIER_LOG_FORMAT=console
+      - PAPERVERIFIER_LOG_LEVEL=DEBUG
+    restart: unless-stopped

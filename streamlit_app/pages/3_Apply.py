@@ -6,23 +6,9 @@ Uses :class:`FeedbackApplier` to apply selected feedback items and
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
-
-import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
-
-# ---------------------------------------------------------------------------
-# Async helper
-# ---------------------------------------------------------------------------
-
-
-def run_async(coro: Any) -> Any:
-    """Run an async coroutine from synchronous Streamlit code."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +85,10 @@ for num in valid_selected:
 st.divider()
 st.subheader("Conflict Check")
 
+# Initialize conflicts before the try block to prevent NameError (CRIT-9).
+conflicts: list[tuple[int, int]] = []
+force_mode = False
+
 try:
     from paperverifier.feedback.applier import FeedbackApplier, FeedbackConflictError
 
@@ -122,11 +112,9 @@ try:
         )
     else:
         st.success("No conflicts detected among selected items.")
-        force_mode = False
 
 except Exception as exc:
     st.error(f"Error during conflict detection: {exc}")
-    force_mode = False
 
 # ---------------------------------------------------------------------------
 # Apply changes
@@ -234,7 +222,7 @@ if applied is not None:
                 applied.modified_text,
                 context_lines=3,
             )
-            st.components.v1.html(html_diff, height=600, scrolling=True)
+            st.components.v1.html(html_diff, height=800, scrolling=True)  # MED-U9: taller
 
         with diff_tab_unified:
             unified = DiffGenerator.unified_diff(

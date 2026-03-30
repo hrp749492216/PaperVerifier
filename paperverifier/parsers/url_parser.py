@@ -161,43 +161,66 @@ class URLParser(BaseParser):
         try:
             timeout = aiohttp.ClientTimeout(total=_DOWNLOAD_TIMEOUT)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, allow_redirects=True) as response:
-                    if response.status != 200:
-                        raise InputValidationError(
-                            f"Failed to download URL (HTTP {response.status}): {url}"
-                        )
+                # Disable auto-redirects and re-validate each redirect
+                # target to prevent SSRF bypass via redirect (CRIT-2).
+                current_url = url
+                max_redirects = 5
+                for _ in range(max_redirects + 1):
+                    async with session.get(
+                        current_url, allow_redirects=False
+                    ) as response:
+                        if response.status in (301, 302, 303, 307, 308):
+                            location = response.headers.get("Location")
+                            if not location:
+                                raise InputValidationError(
+                                    f"Redirect with no Location header from: {current_url}"
+                                )
+                            # Resolve relative redirects.
+                            location = urllib.parse.urljoin(current_url, location)
+                            # Re-validate the redirect target for SSRF.
+                            current_url = validate_url(location)
+                            continue
 
-                    content_type = response.content_type or ""
-                    final_url = str(response.url)
-
-                    # Check Content-Length before downloading.
-                    content_length = response.content_length
-                    if content_length and content_length > _MAX_DOWNLOAD_SIZE:
-                        raise InputValidationError(
-                            f"File too large: {content_length:,} bytes "
-                            f"(max {_MAX_DOWNLOAD_SIZE:,})."
-                        )
-
-                    # Read with size limit.
-                    chunks: list[bytes] = []
-                    total_size = 0
-                    async for chunk in response.content.iter_chunked(8192):
-                        total_size += len(chunk)
-                        if total_size > _MAX_DOWNLOAD_SIZE:
+                        if response.status != 200:
                             raise InputValidationError(
-                                f"Download exceeded size limit of "
-                                f"{_MAX_DOWNLOAD_SIZE:,} bytes."
+                                f"Failed to download URL (HTTP {response.status}): {current_url}"
                             )
-                        chunks.append(chunk)
 
-                    content = b"".join(chunks)
-                    logger.info(
-                        "url_downloaded",
-                        url=url,
-                        size=len(content),
-                        content_type=content_type,
+                        content_type = response.content_type or ""
+                        final_url = str(response.url)
+
+                        # Check Content-Length before downloading.
+                        content_length = response.content_length
+                        if content_length and content_length > _MAX_DOWNLOAD_SIZE:
+                            raise InputValidationError(
+                                f"File too large: {content_length:,} bytes "
+                                f"(max {_MAX_DOWNLOAD_SIZE:,})."
+                            )
+
+                        # Read with size limit.
+                        chunks: list[bytes] = []
+                        total_size = 0
+                        async for chunk in response.content.iter_chunked(8192):
+                            total_size += len(chunk)
+                            if total_size > _MAX_DOWNLOAD_SIZE:
+                                raise InputValidationError(
+                                    f"Download exceeded size limit of "
+                                    f"{_MAX_DOWNLOAD_SIZE:,} bytes."
+                                )
+                            chunks.append(chunk)
+
+                        content = b"".join(chunks)
+                        logger.info(
+                            "url_downloaded",
+                            url=url,
+                            size=len(content),
+                            content_type=content_type,
+                        )
+                        return content, content_type, final_url
+                else:
+                    raise InputValidationError(
+                        f"Too many redirects (>{max_redirects}) from: {url}"
                     )
-                    return content, content_type, final_url
 
         except InputValidationError:
             raise
@@ -220,10 +243,29 @@ class URLParser(BaseParser):
 
         try:
             async with httpx.AsyncClient(
-                follow_redirects=True,
+                follow_redirects=False,
                 timeout=_DOWNLOAD_TIMEOUT,
             ) as client:
-                response = await client.get(url)
+                # Manually follow redirects with SSRF re-validation (CRIT-2).
+                current_url = url
+                max_redirects = 5
+                for _ in range(max_redirects):
+                    response = await client.get(current_url)
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location")
+                        if not location:
+                            raise InputValidationError(
+                                f"Redirect with no Location header from: {current_url}"
+                            )
+                        location = urllib.parse.urljoin(current_url, location)
+                        current_url = validate_url(location)
+                        continue
+                    break
+                else:
+                    raise InputValidationError(
+                        f"Too many redirects (>{max_redirects}) from: {url}"
+                    )
+                response = await client.get(current_url)
 
                 if response.status_code != 200:
                     raise InputValidationError(

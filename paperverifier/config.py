@@ -16,6 +16,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Literal
 
@@ -144,10 +145,11 @@ class AppSettings(BaseSettings):
 # ---------------------------------------------------------------------------
 
 _settings: AppSettings | None = None
+_settings_lock = threading.Lock()
 
 
 def get_settings() -> AppSettings:
-    """Return the global :class:`AppSettings` singleton.
+    """Return the global :class:`AppSettings` singleton (thread-safe).
 
     The instance is created lazily on first call and reused thereafter.  To
     force a reload (e.g. in tests), assign ``None`` to the module-level
@@ -155,7 +157,9 @@ def get_settings() -> AppSettings:
     """
     global _settings  # noqa: PLW0603
     if _settings is None:
-        _settings = AppSettings()
+        with _settings_lock:
+            if _settings is None:
+                _settings = AppSettings()
     return _settings
 
 
@@ -190,8 +194,11 @@ def _redact_sensitive_keys(
     for key in list(event_dict):
         key_lower = key.lower()
         if key_lower in _SENSITIVE_KEYS or any(
-            fragment in key_lower for fragment in ("secret", "password", "token", "api_key")
+            fragment in key_lower
+            for fragment in ("secret", "password", "api_key", "authorization")
         ):
+            # Do NOT match "token" as a substring -- it would redact
+            # "input_tokens" and "output_tokens" metrics (HIGH-I4).
             event_dict[key] = "[REDACTED]"
     return event_dict
 
@@ -244,6 +251,6 @@ def setup_logging(level: str = "INFO", fmt: str = "json") -> None:
 
 
 # ---------------------------------------------------------------------------
-# Initialise logging with defaults on first import
+# Deferred logging setup -- call setup_logging() explicitly rather than
+# at import time so that it does not override user configuration (MED-I9).
 # ---------------------------------------------------------------------------
-setup_logging()

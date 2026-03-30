@@ -134,6 +134,7 @@ class NoveltyAssessmentAgent(BaseAgent):
         system_prompt_with_caveat = system_prompt + _KNOWLEDGE_CUTOFF_CAVEAT
 
         related_works_text = _format_related_works(related_works)
+        summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
         self._logger.info(
@@ -147,9 +148,28 @@ class NoveltyAssessmentAgent(BaseAgent):
 
         all_findings: list[Finding] = []
         for chunk in chunks:
+            # Add chunk context for partial documents so the LLM knows
+            # it is analysing a portion of the full paper.
+            if chunk.is_complete:
+                document_text = chunk.text
+            else:
+                document_text = (
+                    f"=== DOCUMENT SUMMARY (for global context) ===\n"
+                    f"{summary}\n\n"
+                    f"=== DOCUMENT CHUNK {chunk.chunk_index + 1}/{chunk.total_chunks} ===\n"
+                    f"NOTE: You are analysing chunk {chunk.chunk_index + 1} of "
+                    f"{chunk.total_chunks}. This is a partial view of the document. "
+                    f"Focus your analysis on this portion but use the summary above "
+                    f"for overall context.\n\n"
+                    f"{chunk.text}"
+                )
+
+            # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
+            safe_text = document_text.replace("{", "{{").replace("}", "}}")
+            safe_works = related_works_text.replace("{", "{{").replace("}", "}}")
             user_msg = user_template.format(
-                document_text=chunk.text,
-                related_works=related_works_text,
+                document_text=safe_text,
+                related_works=safe_works,
             )
             messages = [
                 Message(role="system", content=system_prompt_with_caveat),

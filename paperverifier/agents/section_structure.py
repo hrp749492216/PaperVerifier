@@ -97,9 +97,12 @@ class SectionStructureAgent(BaseAgent):
         # Structure analysis works best with the complete document.
         # Use full_text directly; the model's context window is typically
         # large enough for structure verification.
+        # Escape curly braces to avoid crashes on LaTeX/code content (CRIT-1).
+        safe_text = document.full_text.replace("{", "{{").replace("}", "}}")
+        safe_sections = sections_summary.replace("{", "{{").replace("}", "}}")
         user_msg = user_template.format(
-            document_text=document.full_text,
-            sections_summary=sections_summary,
+            document_text=safe_text,
+            sections_summary=safe_sections,
         )
 
         messages = [

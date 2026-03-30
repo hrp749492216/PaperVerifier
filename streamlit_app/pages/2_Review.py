@@ -113,9 +113,18 @@ _SEVERITY_ICONS: dict[str, str] = {
 
 
 def _score_color(score: float | None) -> str:
-    """Return a CSS-safe colour for an overall score."""
+    """Return a CSS-safe colour for an overall score.
+
+    HIGH-U8: Accepts *either* a 0-1 float or a 0-100 percentage and
+    normalises to the 0-1 scale before applying thresholds so the
+    colour mapping is consistent regardless of which scale upstream
+    code uses.
+    """
     if score is None:
         return "gray"
+    # Normalise: if the value is > 1 assume it is on a 0-100 scale.
+    if score > 1:
+        score = score / 100.0
     if score >= 0.8:
         return "green"
     if score >= 0.5:
@@ -134,15 +143,11 @@ score_col, summary_col = st.columns([1, 3])
 with score_col:
     score = report.overall_score
     if score is not None:
-        colour = _score_color(score)
-        st.markdown(
-            f'<div style="text-align:center; padding:20px; '
-            f'border-radius:12px; background:{colour}20; '
-            f'border: 2px solid {colour};">'
-            f'<h1 style="color:{colour}; margin:0;">{score:.0%}</h1>'
-            f'<p style="margin:0;">Overall Score</p></div>',
-            unsafe_allow_html=True,
-        )
+        # HIGH-S3: Use st.metric instead of unsafe_allow_html to
+        # avoid establishing an XSS-vulnerable pattern.
+        # Normalise to percentage for display.
+        display_score = score if score > 1 else score * 100
+        st.metric("Overall Score", f"{display_score:.0f}%")
     else:
         st.metric("Overall Score", "N/A")
 
@@ -217,31 +222,37 @@ all_agents = sorted(
     {item.finding.agent_role for item in all_findings_items}
 )
 
-filter_col1, filter_col2, filter_col3 = st.columns(3)
+# MED-U6: Wrap filters in a form so changing a single dropdown doesn't
+# trigger an immediate full-page rerun.  The user clicks "Apply Filters"
+# once they are happy with the combination.
+with st.form("filter_form"):
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
 
-with filter_col1:
-    selected_severities = st.multiselect(
-        "Severity",
-        options=all_severities,
-        default=all_severities,
-        key="filter_severity",
-    )
+    with filter_col1:
+        selected_severities = st.multiselect(
+            "Severity",
+            options=all_severities,
+            default=all_severities,
+            key="filter_severity",
+        )
 
-with filter_col2:
-    selected_categories = st.multiselect(
-        "Category",
-        options=all_categories,
-        default=all_categories,
-        key="filter_category",
-    )
+    with filter_col2:
+        selected_categories = st.multiselect(
+            "Category",
+            options=all_categories,
+            default=all_categories,
+            key="filter_category",
+        )
 
-with filter_col3:
-    selected_agents = st.multiselect(
-        "Agent",
-        options=all_agents,
-        default=all_agents,
-        key="filter_agent",
-    )
+    with filter_col3:
+        selected_agents = st.multiselect(
+            "Agent",
+            options=all_agents,
+            default=all_agents,
+            key="filter_agent",
+        )
+
+    st.form_submit_button("Apply Filters")
 
 # Apply filters
 filtered_items = [
@@ -264,9 +275,13 @@ st.subheader("Findings")
 if not filtered_items:
     st.info("No findings match the current filters.")
 else:
+    # HIGH-U3: Scope checkbox keys to report ID so selections don't
+    # persist across different reports.
+    report_id = report.id
+
     # Initialize checkbox states
     for item in filtered_items:
-        cb_key = f"cb_finding_{item.number}"
+        cb_key = f"cb_finding_{report_id}_{item.number}"
         if cb_key not in st.session_state:
             st.session_state[cb_key] = False
 
@@ -275,12 +290,12 @@ else:
     with sel_col1:
         if st.button("Select All Visible", key="btn_select_all"):
             for item in filtered_items:
-                st.session_state[f"cb_finding_{item.number}"] = True
+                st.session_state[f"cb_finding_{report_id}_{item.number}"] = True
             st.rerun()
     with sel_col2:
         if st.button("Deselect All", key="btn_deselect_all"):
             for item in filtered_items:
-                st.session_state[f"cb_finding_{item.number}"] = False
+                st.session_state[f"cb_finding_{report_id}_{item.number}"] = False
             st.rerun()
 
     # Render each finding as an expander
@@ -296,7 +311,7 @@ else:
             expanded=False,
         ):
             # Checkbox for selection
-            cb_key = f"cb_finding_{item.number}"
+            cb_key = f"cb_finding_{report_id}_{item.number}"
             st.checkbox(
                 "Select for application",
                 key=cb_key,
@@ -345,22 +360,20 @@ action_col1, action_col2, action_col3 = st.columns(3)
 
 with action_col1:
     if st.button("Apply Selected", type="primary", key="btn_apply_selected"):
-        # Gather selected item numbers
+        # Gather selected item numbers (scoped to report ID)
+        _report_id = report.id
         selected = [
             item.number
             for item in all_findings_items
-            if st.session_state.get(f"cb_finding_{item.number}", False)
+            if st.session_state.get(f"cb_finding_{_report_id}_{item.number}", False)
         ]
         if not selected:
             st.warning("No findings selected. Use the checkboxes to select findings to apply.")
         else:
             st.session_state["selected_items"] = selected
-            st.success(f"Selected {len(selected)} item(s). Navigate to Apply Feedback.")
-            st.page_link(
-                "streamlit_app/pages/3_Apply.py",
-                label="Go to Apply Feedback",
-                icon="\u27a1\ufe0f",
-            )
+            st.toast(f"Selected {len(selected)} item(s). Navigating to Apply Feedback...")
+            # MED-U8: Auto-navigate to the Apply page via switch_page
+            st.switch_page("streamlit_app/pages/3_Apply.py")
 
 with action_col2:
     # Export JSON

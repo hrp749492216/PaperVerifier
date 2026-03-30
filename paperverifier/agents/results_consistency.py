@@ -140,10 +140,11 @@ class ResultsConsistencyAgent(BaseAgent):
             conclusion_sections=len(conclusion_sections),
         )
 
+        # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
         user_msg = user_template.format(
-            methodology_text=methodology_text,
-            results_text=results_text,
-            conclusion_text=conclusion_text,
+            methodology_text=methodology_text.replace("{", "{{").replace("}", "}}"),
+            results_text=results_text.replace("{", "{{").replace("}", "}}"),
+            conclusion_text=conclusion_text.replace("{", "{{").replace("}", "}}"),
         )
 
         messages = [

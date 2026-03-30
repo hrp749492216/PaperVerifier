@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from urllib.parse import quote as _url_quote
 
 import aiohttp
 import structlog
@@ -60,6 +61,14 @@ class CrossRefClient:
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
+
+    # -- Async context manager ---------------------------------------------
+
+    async def __aenter__(self) -> CrossRefClient:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
 
     # -- Session management ------------------------------------------------
 
@@ -155,7 +164,7 @@ class CrossRefClient:
         Returns the Crossref work message, or ``None`` if the DOI does not
         exist or the request fails.
         """
-        data = await self._request(f"/works/{doi}")
+        data = await self._request(f"/works/{_url_quote(doi, safe='')}")
         if data is None:
             return None
         # Crossref wraps results in {"status": "ok", "message": {...}}.
@@ -200,7 +209,7 @@ class CrossRefClient:
         Returns ``True`` if retracted, ``False`` otherwise (including on
         lookup failure).
         """
-        data = await self._request(f"/works/{doi}")
+        data = await self._request(f"/works/{_url_quote(doi, safe='')}")
         if data is None:
             return False
         message: dict[str, Any] = data.get("message", {})

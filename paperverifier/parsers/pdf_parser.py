@@ -1,9 +1,8 @@
 """PDF document parser.
 
-Uses PyMuPDF (fitz) as the primary extraction engine for its superior
-layout analysis and font metadata, with pdfplumber as a fallback.
-Detects sections based on font size differences and handles two-column
-layouts.
+Uses pdfplumber as the primary extraction engine.  PyMuPDF (fitz) was
+removed because it is AGPL-3.0 licensed, incompatible with the proprietary
+license (CRIT-5).  Section detection uses text heuristics.
 """
 
 from __future__ import annotations
@@ -41,10 +40,8 @@ class PDFParser(BaseParser):
     """Parse PDF documents into :class:`ParsedDocument`.
 
     Strategy:
-    1. Try PyMuPDF (``fitz``) first -- better layout analysis, font
-       metadata, and two-column support.
-    2. Fall back to ``pdfplumber`` if PyMuPDF is unavailable or fails.
-    3. If extracted text has > 20% non-printable characters, log a
+    1. Use ``pdfplumber`` for text extraction with table support.
+    2. If extracted text has > 20% non-printable characters, log a
        quality warning.
     """
 
@@ -99,15 +96,13 @@ class PDFParser(BaseParser):
                 "File does not appear to be a valid PDF (missing %PDF header)."
             )
 
-        # Try extraction engines in priority order.
-        text, sections, metadata = self._try_pymupdf(pdf_bytes)
-        if text is None:
-            text, sections, metadata = self._try_pdfplumber(pdf_bytes)
+        # Use pdfplumber for extraction (PyMuPDF removed due to AGPL license).
+        text, sections, metadata = self._try_pdfplumber(pdf_bytes)
 
         if text is None:
             raise RuntimeError(
-                "No PDF extraction library available. "
-                "Install pymupdf or pdfplumber: pip install pymupdf pdfplumber"
+                "pdfplumber is required for PDF parsing. "
+                "Install with: pip install pdfplumber"
             )
 
         # Quality check.
@@ -151,87 +146,7 @@ class PDFParser(BaseParser):
         )
 
     # ------------------------------------------------------------------
-    # PyMuPDF extraction
-    # ------------------------------------------------------------------
-
-    def _try_pymupdf(
-        self, pdf_bytes: bytes
-    ) -> tuple[str | None, list[Section], dict[str, Any]]:
-        """Attempt extraction using PyMuPDF (fitz).
-
-        Returns ``(full_text, sections, metadata)`` or ``(None, [], {})``
-        if the library is unavailable.
-        """
-        try:
-            import fitz  # type: ignore[import-untyped]
-        except ImportError:
-            logger.debug("pymupdf_not_available")
-            return None, [], {}
-
-        try:
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        except Exception as exc:
-            logger.warning("pymupdf_open_failed", error=str(exc))
-            return None, [], {}
-
-        metadata: dict[str, Any] = {}
-        try:
-            raw_meta = doc.metadata or {}
-            for key in ("title", "author", "subject", "keywords", "creator"):
-                val = raw_meta.get(key)
-                if val:
-                    metadata[key] = val
-        except Exception:
-            pass
-
-        # Extract text with font information for section detection.
-        all_blocks: list[dict[str, Any]] = []
-        full_text_parts: list[str] = []
-
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            # sort=True handles two-column layouts by reading left-to-right.
-            blocks = page.get_text("dict", sort=True).get("blocks", [])
-            for block in blocks:
-                if block.get("type") != 0:
-                    continue  # Skip image blocks.
-                for line in block.get("lines", []):
-                    line_text = ""
-                    max_font_size = 0.0
-                    is_bold = False
-                    for span in line.get("spans", []):
-                        span_text = span.get("text", "")
-                        line_text += span_text
-                        font_size = span.get("size", 0)
-                        if font_size > max_font_size:
-                            max_font_size = font_size
-                        flags = span.get("flags", 0)
-                        if flags & 2 ** 4:  # Bold flag.
-                            is_bold = True
-                    line_text = line_text.strip()
-                    if line_text:
-                        all_blocks.append({
-                            "text": line_text,
-                            "font_size": max_font_size,
-                            "bold": is_bold,
-                            "page": page_num,
-                        })
-                        full_text_parts.append(line_text)
-
-        doc.close()
-
-        if not all_blocks:
-            return None, [], metadata
-
-        full_text = "\n".join(full_text_parts)
-
-        # Detect sections from font metadata.
-        sections = self._detect_sections(all_blocks, full_text)
-
-        return full_text, sections, metadata
-
-    # ------------------------------------------------------------------
-    # pdfplumber extraction
+    # pdfplumber extraction (primary engine)
     # ------------------------------------------------------------------
 
     def _try_pdfplumber(
@@ -264,8 +179,19 @@ class PDFParser(BaseParser):
         except Exception:
             pass
 
+        # Enforce page limit (MED-S4).
+        from paperverifier.config import get_settings
+        max_pages = get_settings().max_document_pages
+        pages_to_process = pdf.pages[:max_pages]
+        if len(pdf.pages) > max_pages:
+            logger.warning(
+                "pdf_page_limit",
+                total_pages=len(pdf.pages),
+                max_pages=max_pages,
+            )
+
         text_parts: list[str] = []
-        for page in pdf.pages:
+        for page in pages_to_process:
             try:
                 page_text = page.extract_text()
                 if page_text:
@@ -288,91 +214,7 @@ class PDFParser(BaseParser):
         return full_text, sections, metadata
 
     # ------------------------------------------------------------------
-    # Section detection from font metadata (PyMuPDF)
-    # ------------------------------------------------------------------
-
-    def _detect_sections(
-        self,
-        blocks: list[dict[str, Any]],
-        full_text: str,
-    ) -> list[Section]:
-        """Detect sections based on font size differences.
-
-        Lines with font sizes significantly larger than the body text
-        median are treated as headings.  Bold text at larger sizes is
-        weighted more heavily.
-        """
-        if not blocks:
-            return self._heuristic_sections(full_text)
-
-        # Compute median body font size.
-        font_sizes = [b["font_size"] for b in blocks if b["font_size"] > 0]
-        if not font_sizes:
-            return self._heuristic_sections(full_text)
-
-        font_sizes_sorted = sorted(font_sizes)
-        median_size = font_sizes_sorted[len(font_sizes_sorted) // 2]
-
-        # Heading threshold: at least 1.2x the median font size.
-        heading_threshold = median_size * 1.2
-
-        # Build section boundaries.
-        current_heading: str | None = None
-        current_text_parts: list[str] = []
-        section_data: list[tuple[str, str]] = []
-
-        for block in blocks:
-            is_heading = (
-                block["font_size"] >= heading_threshold
-                or (block["bold"] and block["font_size"] >= median_size * 1.1)
-            )
-            # Additional heuristic: headings are usually short.
-            is_short = len(block["text"].split()) <= 12
-
-            if is_heading and is_short:
-                # Save previous section.
-                if current_heading is not None:
-                    section_data.append(
-                        (current_heading, "\n".join(current_text_parts))
-                    )
-                elif current_text_parts:
-                    # Text before first heading -- treat as introduction.
-                    section_data.append(
-                        ("Introduction", "\n".join(current_text_parts))
-                    )
-                current_heading = block["text"]
-                current_text_parts = []
-            else:
-                current_text_parts.append(block["text"])
-
-        # Don't forget the last section.
-        if current_heading is not None:
-            section_data.append((current_heading, "\n".join(current_text_parts)))
-        elif current_text_parts:
-            section_data.append(("Document", "\n".join(current_text_parts)))
-
-        if not section_data:
-            return self._heuristic_sections(full_text)
-
-        # Convert to Section objects.
-        sections: list[Section] = []
-        char_offset = 0
-        for idx, (heading, body) in enumerate(section_data, start=1):
-            section_id = f"sec-{idx}"
-            section = self._build_section(
-                section_id=section_id,
-                title=heading,
-                text=body,
-                level=1,
-                start_char=char_offset,
-            )
-            sections.append(section)
-            char_offset += len(heading) + len(body) + 2
-
-        return sections
-
-    # ------------------------------------------------------------------
-    # Heuristic sections (fallback)
+    # Heuristic sections
     # ------------------------------------------------------------------
 
     def _heuristic_sections(self, text: str) -> list[Section]:

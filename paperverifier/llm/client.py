@@ -16,6 +16,7 @@ from typing import Any
 
 import structlog
 
+from paperverifier.audit import log_api_key_access
 from paperverifier.llm.exceptions import (
     LLMAuthError,
     LLMContextLengthError,
@@ -88,6 +89,7 @@ class UnifiedLLMClient:
     def __init__(self) -> None:
         self._api_keys: dict[LLMProvider, str] = {}
         self._openai_clients: dict[tuple[str | None, str], Any] = {}
+        self._anthropic_clients: dict[str, Any] = {}  # Cached by api_key hash (HIGH-I1)
 
     # -- API key resolution ------------------------------------------------
 
@@ -133,6 +135,7 @@ class UnifiedLLMClient:
     def set_api_key(self, provider: LLMProvider, key: str) -> None:
         """Persist an API key in the runtime cache *and* the OS keyring."""
         self._api_keys[provider] = key
+        log_api_key_access(provider.value, "write")
         try:
             import keyring  # noqa: PLC0415
 
@@ -149,7 +152,8 @@ class UnifiedLLMClient:
 
     def _get_openai_client(self, base_url: str | None, api_key: str) -> Any:
         """Return a cached :class:`openai.AsyncOpenAI` client."""
-        cache_key = (base_url, api_key)
+        # Use hash of API key rather than raw key as cache key (MED-S2).
+        cache_key = (base_url, str(hash(api_key)))
         if cache_key not in self._openai_clients:
             import openai  # noqa: PLC0415
 
@@ -181,7 +185,11 @@ class UnifiedLLMClient:
             else:
                 chat_messages.append({"role": msg.role, "content": msg.content})
 
-        client = anthropic.AsyncAnthropic(api_key=api_key)
+        # Cache Anthropic clients for connection reuse (HIGH-I1).
+        cache_key = str(hash(api_key))
+        if cache_key not in self._anthropic_clients:
+            self._anthropic_clients[cache_key] = anthropic.AsyncAnthropic(api_key=api_key)
+        client = self._anthropic_clients[cache_key]
         try:
             response = await client.messages.create(
                 model=model,

@@ -8,8 +8,9 @@ sensible defaults that can be overridden through the YAML config store.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
+
+from pydantic import BaseModel, Field
 
 from paperverifier.llm.providers import LLMProvider
 
@@ -28,8 +29,7 @@ class AgentRole(str, Enum):
     WRITER = "writer"
 
 
-@dataclass
-class RoleAssignment:
+class RoleAssignment(BaseModel):
     """Binds an agent role to a concrete LLM configuration.
 
     Attributes:
@@ -41,8 +41,8 @@ class RoleAssignment:
 
     provider: LLMProvider
     model: str
-    temperature: float = field(default=0.3)
-    max_tokens: int = field(default=4096)
+    temperature: float = Field(default=0.3)
+    max_tokens: int = Field(default=4096)
 
 
 DEFAULT_ASSIGNMENTS: dict[AgentRole, RoleAssignment] = {

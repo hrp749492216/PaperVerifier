@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from urllib.parse import quote as _url_quote
 
 import aiohttp
 import structlog
@@ -60,6 +61,14 @@ class OpenAlexClient:
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
+
+    # -- Async context manager ---------------------------------------------
+
+    async def __aenter__(self) -> OpenAlexClient:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
 
     # -- Session management ------------------------------------------------
 
@@ -162,7 +171,7 @@ class OpenAlexClient:
         """
         if not doi.startswith("https://doi.org/"):
             doi = f"https://doi.org/{doi}"
-        return await self._request(f"/works/{doi}")
+        return await self._request(f"/works/{_url_quote(doi, safe='')}")
 
     async def check_retraction(self, work_id: str) -> bool:
         """Check whether a work has been retracted.

@@ -6,25 +6,20 @@ preview, and launches the verification pipeline via :class:`AgentOrchestrator`.
 
 from __future__ import annotations
 
-import asyncio
 import tempfile
+import threading
 from pathlib import Path
-from typing import Any
 
-import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
+from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 # ---------------------------------------------------------------------------
-# Async helper
+# Constants
 # ---------------------------------------------------------------------------
 
-
-def run_async(coro: Any) -> Any:
-    """Run an async coroutine from synchronous Streamlit code."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+MAX_UPLOAD_SIZE_MB = 50
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +72,19 @@ with tab_upload:
             f"**Type:** {uploaded_file.type or 'unknown'}"
         )
 
-        if st.button("Parse Document", key="btn_parse_file"):
+        # HIGH-U1: Application-level file size check
+        if uploaded_file.size > MAX_UPLOAD_SIZE_BYTES:
+            st.error(
+                f"File exceeds the {MAX_UPLOAD_SIZE_MB} MB size limit "
+                f"({uploaded_file.size / (1024 * 1024):.1f} MB). "
+                "Please upload a smaller file."
+            )
+        # MED-U1: Reject empty files
+        elif uploaded_file.size == 0:
+            st.error("The uploaded file is empty. Please upload a valid document.")
+        elif st.button("Parse Document", key="btn_parse_file"):
             with st.status("Parsing document...", expanded=True) as status:
+                tmp_path: str | None = None
                 try:
                     from paperverifier.parsers.router import InputRouter
 
@@ -100,8 +106,10 @@ with tab_upload:
                         router.parse(tmp_path, content=file_bytes)
                     )
 
-                    # Clean up temp file
-                    Path(tmp_path).unlink(missing_ok=True)
+                    # MED-U5: Clear stale downstream state on new parse
+                    st.session_state["verification_report"] = None
+                    st.session_state["selected_items"] = []
+                    st.session_state["applied_feedback"] = None
 
                     st.session_state["parsed_document"] = parsed_document
                     status.update(
@@ -111,6 +119,10 @@ with tab_upload:
                 except Exception as exc:
                     st.error(f"Failed to parse document: {exc}")
                     status.update(label="Parsing failed", state="error")
+                finally:
+                    # MED-U2: Always clean up temp file, even on failure
+                    if tmp_path is not None:
+                        Path(tmp_path).unlink(missing_ok=True)
 
 # -- Tab 2: URL Input -----------------------------------------------------
 
@@ -261,20 +273,25 @@ if doc is not None:
                 assignments = load_role_assignments()
                 st.session_state["role_assignments"] = assignments
 
-            # Progress tracking via session state
-            agent_statuses: dict[str, str] = {}
-
-            progress_bar = st.progress(0, text="Initializing agents...")
-            status_container = st.container()
-
             # Build a list of agent role names we expect
             from paperverifier.agents.orchestrator import _AGENT_CLASSES
 
             expected_agents = [role.value for role in _AGENT_CLASSES.keys()]
             total_agents = len(expected_agents)
 
+            # HIGH-U2 / CRIT-10: Track progress with actual updates and
+            # run the verification in a background thread so we don't
+            # block the Streamlit server.
+            agent_statuses: dict[str, str] = {}
+            completed_count = 0
+
+            progress_bar = st.progress(0, text="Initializing agents...")
+
             async def progress_callback(role_name: str, status: str) -> None:
+                nonlocal completed_count
                 agent_statuses[role_name] = status
+                if status in ("completed", "failed", "disabled"):
+                    completed_count += 1
 
             orchestrator = AgentOrchestrator(
                 client=client,
@@ -282,14 +299,50 @@ if doc is not None:
                 progress_callback=progress_callback,
             )
 
+            # Container to hold result / error from the background thread
+            result_holder: dict[str, object] = {}
+
+            def _run_verification() -> None:
+                """Run the async verification in a dedicated thread."""
+                try:
+                    report = run_async(orchestrator.verify(doc))
+                    result_holder["report"] = report
+                except Exception as thread_exc:
+                    result_holder["error"] = thread_exc
+
             with st.status(
                 "Running verification pipeline...", expanded=True
             ) as run_status:
                 for role_name in expected_agents:
                     st.write(f"Agent queued: **{role_name}**")
 
-                report = run_async(orchestrator.verify(doc))
+                # CRIT-10: Run in a thread to avoid blocking the server
+                worker = threading.Thread(target=_run_verification, daemon=True)
+                worker.start()
 
+                # HIGH-U2: Poll and update progress bar while worker runs
+                import time
+                while worker.is_alive():
+                    done = completed_count
+                    pct = int((done / total_agents) * 100) if total_agents else 0
+                    running = [
+                        name for name, s in agent_statuses.items() if s == "running"
+                    ]
+                    label = (
+                        f"Running: {', '.join(running)}... ({done}/{total_agents} done)"
+                        if running
+                        else f"Processing... ({done}/{total_agents} done)"
+                    )
+                    progress_bar.progress(min(pct, 99), text=label)
+                    time.sleep(0.3)
+
+                worker.join()
+
+                # Check for errors from the thread
+                if "error" in result_holder:
+                    raise result_holder["error"]  # type: ignore[misc]
+
+                report = result_holder["report"]  # type: ignore[assignment]
                 st.session_state["verification_report"] = report
 
                 # Display completion info
@@ -330,10 +383,14 @@ if doc is not None:
             )
 
         except Exception as exc:
+            # HIGH-S4: Show only the error message to users; hide stack
+            # traces behind a debug expander to avoid leaking file paths.
             st.error(f"Verification failed: {exc}")
             import traceback
+            import logging
 
-            with st.expander("Error details"):
+            logging.getLogger(__name__).error(traceback.format_exc())
+            with st.expander("Debug details (for developers)"):
                 st.code(traceback.format_exc())
 
 elif st.session_state.get("parsed_document") is None:

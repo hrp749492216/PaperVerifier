@@ -61,7 +61,7 @@ class VerificationReport(BaseModel):
     total_findings: int = 0
     severity_counts: dict[str, int] = Field(default_factory=dict)
     agents_completed: int = 0
-    agents_total: int = 9
+    agents_total: int = 0
     duration_seconds: float = 0.0
     total_tokens: dict[str, int] = Field(default_factory=dict)
     estimated_cost_usd: float | None = None
@@ -82,6 +82,18 @@ class VerificationReport(BaseModel):
             counts[finding.severity.value] += 1
         self.severity_counts = dict(counts)
         self.total_findings = len(findings)
+
+    def compute_estimated_cost(self) -> None:
+        """Estimate the USD cost based on aggregated token usage.
+
+        Uses approximate per-1K-token pricing:
+        - Input tokens:  $0.003 / 1K tokens
+        - Output tokens: $0.015 / 1K tokens
+        """
+        input_tokens = self.total_tokens.get("input_tokens", 0)
+        output_tokens = self.total_tokens.get("output_tokens", 0)
+        cost = (input_tokens / 1000.0) * 0.003 + (output_tokens / 1000.0) * 0.015
+        self.estimated_cost_usd = round(cost, 6)
 
     def get_findings_by_severity(self, severity: Severity) -> list[Finding]:
         """Return all findings matching *severity*."""

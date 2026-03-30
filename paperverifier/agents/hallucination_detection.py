@@ -80,7 +80,9 @@ class HallucinationDetectionAgent(BaseAgent):
                     f"{chunk.text}"
                 )
 
-            user_msg = user_template.format(document_text=document_text)
+            # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
+            safe_text = document_text.replace("{", "{{").replace("}", "}}")
+            user_msg = user_template.format(document_text=safe_text)
             messages = [
                 Message(role="system", content=system_prompt),
                 Message(role="user", content=user_msg),

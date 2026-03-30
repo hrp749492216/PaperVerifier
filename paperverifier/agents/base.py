@@ -331,7 +331,32 @@ class BaseAgent:
         """Format the user prompt template with chunk and document data.
 
         The default implementation substitutes ``{document_text}`` with the
-        chunk text.  Subclasses override this to inject role-specific
-        variables (e.g., ``{references_list}``, ``{api_results}``).
+        chunk text.  When the document has been split into multiple chunks,
+        a context header with the document summary and chunk position
+        (chunk N of M) is automatically prepended so the LLM is aware it
+        is analysing a partial document.  Subclasses override this to
+        inject role-specific variables (e.g., ``{references_list}``,
+        ``{api_results}``).
         """
-        return template.format(document_text=chunk.text)
+        # For multi-chunk documents, prepend a summary and chunk position
+        # so the LLM knows it is seeing a partial document and has global
+        # context (following the pattern from HallucinationDetectionAgent).
+        if chunk.is_complete:
+            document_text = chunk.text
+        else:
+            document_text = (
+                f"=== DOCUMENT SUMMARY (for global context) ===\n"
+                f"{summary}\n\n"
+                f"=== DOCUMENT CHUNK {chunk.chunk_index + 1}/{chunk.total_chunks} ===\n"
+                f"NOTE: You are analysing chunk {chunk.chunk_index + 1} of "
+                f"{chunk.total_chunks}. This is a partial view of the document. "
+                f"Focus your analysis on this portion but use the summary above "
+                f"for overall context.\n\n"
+                f"{chunk.text}"
+            )
+
+        # Escape curly braces in document text before str.format() to avoid
+        # crashes on LaTeX (\begin{equation}), code, or JSON content (CRIT-1).
+        safe_text = document_text.replace("{", "{{").replace("}", "}}")
+        safe_summary = summary.replace("{", "{{").replace("}", "}}")
+        return template.format(document_text=safe_text, summary=safe_summary)

@@ -6,23 +6,9 @@ Manages API keys (stored in the OS keyring) and role-to-model mappings
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
-
-import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
-
-# ---------------------------------------------------------------------------
-# Async helper
-# ---------------------------------------------------------------------------
-
-
-def run_async(coro: Any) -> Any:
-    """Run an async coroutine from synchronous Streamlit code."""
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
+from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 
 # ---------------------------------------------------------------------------
@@ -74,19 +60,21 @@ for provider in LLMProvider:
     is_configured = provider in configured_providers
 
     with st.expander(
-        f"{'\\u2705' if is_configured else '\\u274c'} {spec.display_name}",
+        f"{'\u2705' if is_configured else '\u274c'} {spec.display_name}",
         expanded=False,
     ):
         st.caption(f"Environment variable: `{spec.env_var}`")
         st.caption(f"Default models: {', '.join(spec.default_models)}")
 
         # API key input
+        if is_configured:
+            st.caption("\U0001f511 A key is already saved in your keyring. Enter a new value below only to replace it.")
         key_input = st.text_input(
             f"{spec.display_name} API Key",
             type="password",
             value="",
             key=f"api_key_{provider.value}",
-            placeholder="Enter API key..." if not is_configured else "Key configured (enter new to update)",
+            placeholder="Enter API key..." if not is_configured else "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (key is set -- enter new to update)",
             help=f"Set via keyring or ${spec.env_var} environment variable.",
         )
 
@@ -97,11 +85,11 @@ for provider in LLMProvider:
                 if key_input.strip():
                     try:
                         store_api_key(provider, key_input.strip())
-                        st.success(f"API key for {spec.display_name} saved to keyring.")
                         # Update the client runtime cache too
                         client = st.session_state.get("llm_client")
                         if client is not None:
                             client.set_api_key(provider, key_input.strip())
+                        st.toast(f"API key for {spec.display_name} saved to keyring.", icon="\u2705")
                         st.rerun()
                     except Exception as exc:
                         st.error(f"Failed to save key: {exc}")
@@ -207,13 +195,21 @@ for role in AgentRole:
             else:
                 st.caption("\u26a0\ufe0f Provider key not yet configured")
 
-            # Model input (show default models for selected provider)
+            # Model input -- validate against selected provider's models.
+            # If the provider was changed (model no longer in the new
+            # provider's list), reset to the first default model for the
+            # new provider so users don't inadvertently submit an
+            # invalid model name (MED-U15).
             selected_spec = PROVIDER_REGISTRY[selected_provider]
-            model_value = st.text_input(
+            current_model = current.model
+            if current_model not in selected_spec.default_models:
+                current_model = selected_spec.default_models[0]
+            model_value = st.selectbox(
                 "Model",
-                value=current.model,
+                options=list(selected_spec.default_models),
+                index=list(selected_spec.default_models).index(current_model),
                 key=f"role_model_{role.value}",
-                help=f"Available: {', '.join(selected_spec.default_models)}",
+                help=f"Available models for {selected_spec.display_name}.",
             )
 
         with role_col2:

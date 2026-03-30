@@ -85,10 +85,11 @@ class WriterAgent(BaseAgent):
         # Build instruction
         instruction = self._build_instruction(finding)
 
+        # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
         user_msg = user_template.format(
-            finding=finding_text,
-            context_text=context_text,
-            instruction=instruction,
+            finding=finding_text.replace("{", "{{").replace("}", "}}"),
+            context_text=context_text.replace("{", "{{").replace("}", "}}"),
+            instruction=instruction.replace("{", "{{").replace("}", "}}"),
         )
 
         messages = [

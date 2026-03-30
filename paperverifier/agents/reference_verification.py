@@ -165,9 +165,10 @@ class ReferenceVerificationAgent(BaseAgent):
             document, api_results,
         )
 
+        # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
         user_msg = user_template.format(
-            references_list=references_text,
-            api_results=api_text,
+            references_list=references_text.replace("{", "{{").replace("}", "}}"),
+            api_results=api_text.replace("{", "{{").replace("}", "}}"),
         )
 
         messages = [

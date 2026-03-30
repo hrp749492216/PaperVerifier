@@ -334,8 +334,10 @@ class FeedbackApplier:
         document does not shift offsets for earlier parts that have not yet
         been processed.
 
-        Items whose position cannot be determined are placed at the end
-        (applied last, i.e. they have the lowest effective position).
+        Items whose position cannot be determined are placed at the
+        beginning of the sorted list (lowest sort key).  Because the list
+        is sorted in descending order, these items end up last and are
+        therefore applied first -- before items with known positions.
         """
 
         def _sort_key(item: FeedbackItem) -> int:
@@ -356,8 +358,8 @@ class FeedbackApplier:
                 if idx != -1:
                     return idx
 
-            # Unknown position: sort to the front so it is applied last
-            # after the list is reversed.
+            # Unknown position: sort to the front of the descending list
+            # so these items appear last and are applied first.
             return -1
 
         return sorted(items, key=_sort_key, reverse=True)
@@ -478,16 +480,37 @@ class FeedbackApplier:
 
         Verifies that the text at ``[start_char:end_char]`` matches the
         expected ``original_text`` before performing the replacement.
-        Returns ``None`` if the pre-condition check fails.
+        If the position check fails (e.g. due to earlier modifications
+        shifting text), falls back to searching for the original text
+        in the current document.  Returns ``None`` only if the original
+        text cannot be found at all.
         """
-        actual = text[change.start_char : change.end_char]
+        start = change.start_char
+        end = change.end_char
+        actual = text[start:end]
+
         if actual != change.original_text:
-            logger.error(
-                "feedback_text_mismatch",
+            # Positional mismatch -- attempt to re-locate the original text
+            # in the current version of the document.
+            logger.warning(
+                "feedback_text_position_mismatch_retrying",
                 item_number=change.item_number,
                 expected=change.original_text[:80],
                 actual=actual[:80],
             )
-            return None
+            idx = text.find(change.original_text)
+            if idx == -1:
+                logger.error(
+                    "feedback_text_not_found",
+                    item_number=change.item_number,
+                    expected=change.original_text[:80],
+                )
+                return None
+            start = idx
+            end = idx + len(change.original_text)
+            # Update the change record so downstream consumers see the
+            # corrected positions.
+            change.start_char = start
+            change.end_char = end
 
-        return text[: change.start_char] + change.replacement_text + text[change.end_char :]
+        return text[:start] + change.replacement_text + text[end:]

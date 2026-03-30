@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 
 import click
+
+from paperverifier import __version__
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
@@ -68,7 +70,7 @@ def _score_color(score: float | None) -> str:
 # ===================================================================
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version=__version__)
 def cli():
     """PaperVerifier: Enterprise-grade research paper verification tool."""
 
@@ -122,7 +124,7 @@ async def _verify(
     # ------------------------------------------------------------------
     console.print()
     console.print(Panel.fit(
-        "[bold cyan]PaperVerifier[/bold cyan]  [dim]v0.1.0[/dim]\n"
+        f"[bold cyan]PaperVerifier[/bold cyan]  [dim]v{__version__}[/dim]\n"
         "[dim]Enterprise-grade research paper verification[/dim]",
         border_style="cyan",
     ))

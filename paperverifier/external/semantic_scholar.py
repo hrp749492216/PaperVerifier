@@ -83,6 +83,14 @@ class SemanticScholarClient:
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
 
+    # -- Async context manager ---------------------------------------------
+
+    async def __aenter__(self) -> SemanticScholarClient:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.close()
+
     # -- Session management ------------------------------------------------
 
     async def _get_session(self) -> aiohttp.ClientSession:

@@ -271,7 +271,9 @@ class DOCXParser(BaseParser):
             from lxml import etree  # type: ignore[import-untyped]
 
             ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-            tree = etree.fromstring(footnotes_part.blob)
+            # Disable entity resolution to prevent XML bomb attacks (HIGH-S1).
+            parser = etree.XMLParser(resolve_entities=False, no_network=True)
+            tree = etree.fromstring(footnotes_part.blob, parser=parser)
             footnotes: list[str] = []
             for fn in tree.findall(".//w:footnote", ns):
                 fn_id = fn.get(f"{{{ns['w']}}}id", "")
