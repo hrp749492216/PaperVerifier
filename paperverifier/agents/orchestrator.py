@@ -472,7 +472,7 @@ class AgentOrchestrator:
             # Use only the consolidated findings for counts/feedback to
             # avoid double-counting, while individual agent findings
             # remain accessible via each agent_report.
-            report._consolidated_findings = consolidated_findings
+            report.consolidated_findings = consolidated_findings
 
         # Compute summary statistics, cost estimate, and feedback items
         report.compute_severity_counts()

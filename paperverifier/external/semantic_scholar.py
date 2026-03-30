@@ -85,6 +85,25 @@ class SemanticScholarClient:
         self._session: aiohttp.ClientSession | None = None
         self._session_lock = asyncio.Lock()
 
+    # -- Destructor safety net --------------------------------------------
+
+    def __del__(self) -> None:
+        """Warn and attempt cleanup if the client was not properly closed."""
+        if self._session is not None and not self._session.closed:
+            logger.warning(
+                "s2_client_not_closed",
+                hint="SemanticScholarClient was garbage-collected without "
+                     "calling close(). Use 'async with' to avoid connection leaks.",
+            )
+            # Cannot await in __del__; schedule close on the running loop.
+            try:
+                import asyncio as _asyncio
+
+                loop = _asyncio.get_running_loop()
+                loop.create_task(self._session.close())
+            except RuntimeError:
+                pass  # No running loop; session will be collected.
+
     # -- Async context manager ---------------------------------------------
 
     async def __aenter__(self) -> SemanticScholarClient:

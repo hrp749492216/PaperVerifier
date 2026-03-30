@@ -23,6 +23,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ---------------------------------------------------------------------------
+# Authentication gate (must come before any other content)
+# ---------------------------------------------------------------------------
+
+from streamlit_app.auth import require_auth  # noqa: E402
+
+require_auth()
 
 # ---------------------------------------------------------------------------
 # Session-state defaults

@@ -367,7 +367,9 @@ def _build_minimal_env() -> dict[str, str]:
     prevent information leakage and config interference.
     """
     env: dict[str, str] = {}
-    for var in ("PATH", "LANG", "LC_ALL", "TERM", "TMPDIR"):
+    # TMPDIR is intentionally excluded to prevent predictable temp paths
+    # in sandboxed processes inheriting host-controlled values.
+    for var in ("PATH", "LANG", "LC_ALL", "TERM"):
         val = os.environ.get(var)
         if val is not None:
             env[var] = val

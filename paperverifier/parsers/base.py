@@ -177,24 +177,39 @@ class BaseParser(ABC):
             sentences: list[Sentence] = []
             sentence_texts = self._split_into_sentences(raw_para)
 
-            # Compute sentence offsets by locating each sentence within the
-            # raw paragraph text rather than advancing by normalized length.
-            # This avoids offset drift from whitespace normalization
-            # (Codex-1 fix #5).
+            # Pre-compute a collapsed-whitespace mapping for the entire
+            # paragraph *once* (O(N)) instead of per-sentence (was O(N^2)).
+            # collapsed_to_raw[i] gives the index in raw_para that collapsed
+            # position i corresponds to.
+            collapsed_parts: list[str] = []
+            collapsed_to_raw: list[int] = []
+            in_ws = False
+            for ri_idx, ch in enumerate(raw_para):
+                if ch in (" ", "\t", "\n", "\r"):
+                    if not in_ws:
+                        collapsed_parts.append(" ")
+                        collapsed_to_raw.append(ri_idx)
+                        in_ws = True
+                else:
+                    collapsed_parts.append(ch)
+                    collapsed_to_raw.append(ri_idx)
+                    in_ws = False
+            collapsed_para = "".join(collapsed_parts)
+
             search_start = 0
+            collapsed_search_start = 0
             for sent_idx, sent_text in enumerate(sentence_texts, start=1):
                 sent_id = f"{para_id}.sent-{sent_idx}"
-                # Find the sentence in the raw paragraph text.
-                # Collapse whitespace in both sides for matching.
                 pos = raw_para.find(sent_text, search_start)
                 if pos == -1:
-                    # Fallback: try matching with collapsed whitespace.
-                    import re as _re
-                    collapsed_para = _re.sub(r"\s+", " ", raw_para[search_start:])
-                    collapsed_sent = _re.sub(r"\s+", " ", sent_text)
-                    sub_pos = collapsed_para.find(collapsed_sent)
-                    if sub_pos != -1:
-                        pos = search_start + sub_pos
+                    # Fallback: find in the pre-computed collapsed paragraph.
+                    collapsed_sent = re.sub(r"\s+", " ", sent_text)
+                    sub_pos = collapsed_para.find(
+                        collapsed_sent, collapsed_search_start,
+                    )
+                    if sub_pos != -1 and sub_pos < len(collapsed_to_raw):
+                        pos = collapsed_to_raw[sub_pos]
+                        collapsed_search_start = sub_pos + len(collapsed_sent)
                     else:
                         pos = search_start
                 sent_start_abs = char_offset + pos

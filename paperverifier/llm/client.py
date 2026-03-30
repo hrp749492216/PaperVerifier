@@ -89,8 +89,13 @@ class UnifiedLLMClient:
 
     def __init__(self) -> None:
         self._api_keys: dict[LLMProvider, str] = {}
-        self._openai_clients: dict[tuple[str | None, str], Any] = {}
-        self._anthropic_clients: dict[str, Any] = {}  # Cached by api_key hash (HIGH-I1)
+        # Cached OpenAI-compatible clients keyed by (base_url, api_key_hash).
+        # Typed as Any at declaration because `openai` is imported lazily,
+        # but every value is an ``openai.AsyncOpenAI`` instance.
+        self._openai_clients: dict[tuple[str | None, str], object] = {}
+        # Cached Anthropic clients keyed by api_key_hash (HIGH-I1).
+        # Every value is an ``anthropic.AsyncAnthropic`` instance.
+        self._anthropic_clients: dict[str, object] = {}
 
     # -- API key resolution ------------------------------------------------
 
@@ -168,7 +173,7 @@ class UnifiedLLMClient:
 
     # -- OpenAI client cache -----------------------------------------------
 
-    def _get_openai_client(self, base_url: str | None, api_key: str) -> Any:
+    def _get_openai_client(self, base_url: str | None, api_key: str) -> object:
         """Return a cached :class:`openai.AsyncOpenAI` client."""
         # Use hash of API key rather than raw key as cache key (MED-S2).
         cache_key = (base_url, hashlib.sha256(api_key.encode()).hexdigest())
@@ -275,6 +280,13 @@ class UnifiedLLMClient:
 
     # -- OpenAI-compatible backend -----------------------------------------
 
+    @staticmethod
+    def _is_o_series(model: str) -> bool:
+        """Return True if *model* is an OpenAI o-series reasoning model."""
+        # Matches o1, o1-mini, o1-preview, o3, o3-mini, o4-mini, etc.
+        basename = model.split("/")[-1]  # handle org/model prefixes
+        return bool(basename) and basename[0] == "o" and len(basename) > 1 and basename[1:2].isdigit()
+
     async def _complete_openai(
         self,
         messages: list[Message],
@@ -289,15 +301,30 @@ class UnifiedLLMClient:
         import openai  # noqa: PLC0415
 
         client = self._get_openai_client(base_url, api_key)
-        oai_messages = [{"role": m.role, "content": m.content} for m in messages]
+
+        is_reasoning = self._is_o_series(model)
+
+        # O-series models use "developer" role instead of "system" and do
+        # not accept the legacy "max_tokens" or "temperature" parameters.
+        oai_messages: list[dict[str, str]] = []
+        for m in messages:
+            role = m.role
+            if is_reasoning and role == "system":
+                role = "developer"
+            oai_messages.append({"role": role, "content": m.content})
+
+        create_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": oai_messages,
+        }
+        if is_reasoning:
+            create_kwargs["max_completion_tokens"] = max_tokens
+        else:
+            create_kwargs["temperature"] = temperature
+            create_kwargs["max_tokens"] = max_tokens
 
         try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=oai_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            response = await client.chat.completions.create(**create_kwargs)
         except openai.AuthenticationError as exc:
             raise LLMAuthError(
                 str(exc),

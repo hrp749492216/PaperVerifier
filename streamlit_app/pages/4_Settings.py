@@ -70,6 +70,14 @@ for provider in LLMProvider:
         # API key input
         if is_configured:
             st.caption("\U0001f511 A key is already saved in your keyring. Enter a new value below only to replace it.")
+
+        # If the previous run flagged this key for clearing, remove the
+        # widget-backed value from session state *before* creating the
+        # widget to comply with Streamlit's Session State rules.
+        _clear_flag = f"_clear_api_key_{provider.value}"
+        if st.session_state.pop(_clear_flag, False):
+            st.session_state.pop(f"api_key_{provider.value}", None)
+
         key_input = st.text_input(
             f"{spec.display_name} API Key",
             type="password",
@@ -90,8 +98,9 @@ for provider in LLMProvider:
                         client = st.session_state.get("llm_client")
                         if client is not None:
                             client.set_api_key(provider, key_input.strip())
-                        # Clear the plaintext key from session state
-                        st.session_state[f"api_key_{provider.value}"] = ""
+                        # Flag the widget key for clearing on next rerun
+                        # (cannot mutate widget-backed state after creation).
+                        st.session_state[_clear_flag] = True
                         st.toast(f"API key for {spec.display_name} saved to keyring.", icon="\u2705")
                         st.rerun()
                     except Exception as exc:

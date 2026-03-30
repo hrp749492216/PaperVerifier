@@ -55,6 +55,9 @@ class VerificationReport(BaseModel):
     document_hash: str = ""
     created_at: datetime = Field(default_factory=_utcnow)
     agent_reports: list[AgentReport] = Field(default_factory=list)
+    consolidated_findings: list[Finding] | None = Field(
+        default=None, exclude=True,
+    )
     feedback_items: list[FeedbackItem] = Field(default_factory=list)
     overall_score: float | None = None
     summary: str = ""
@@ -71,7 +74,15 @@ class VerificationReport(BaseModel):
     # ------------------------------------------------------------------
 
     def _all_findings(self) -> list[Finding]:
-        """Collect every finding from every agent report."""
+        """Return the authoritative set of findings for counting/feedback.
+
+        When consolidated findings are available (set by the orchestrator
+        after synthesis), use only those to avoid double-counting the same
+        findings from both per-agent reports and the orchestrator summary.
+        Individual agent findings remain accessible via ``agent_reports``.
+        """
+        if self.consolidated_findings is not None:
+            return list(self.consolidated_findings)
         return [f for report in self.agent_reports for f in report.findings]
 
     def compute_severity_counts(self) -> None:

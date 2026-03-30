@@ -365,6 +365,7 @@ if doc is not None:
                             enrich_document(doc)
                         )
                     except Exception:
+                        logger.exception("enrichment_failed")
                         external_data = {}
 
                     report = loop.run_until_complete(

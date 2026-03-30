@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
 
 import structlog
@@ -39,6 +40,68 @@ _EXTENSION_MAP: dict[str, str] = {
     ".txt": "text",
     ".text": "text",
 }
+
+
+# ---------------------------------------------------------------------------
+# Parser plugin registry
+# ---------------------------------------------------------------------------
+
+# Maps parser name -> factory callable that returns a BaseParser instance.
+# Uses deferred imports so dependencies are loaded on demand.
+_PARSER_REGISTRY: dict[str, Callable[[], BaseParser]] = {}
+
+
+def register_parser(name: str, factory: Callable[[], BaseParser]) -> None:
+    """Register a parser factory under *name*.
+
+    This allows new parsers (e.g. ``.epub``) to be added without modifying
+    the router's ``_instantiate`` method (Open/Closed Principle)::
+
+        from paperverifier.parsers.router import register_parser
+        register_parser("epub", lambda: EPUBParser())
+    """
+    _PARSER_REGISTRY[name] = factory
+
+
+def _register_builtin_parsers() -> None:
+    """Register the built-in parsers with deferred imports."""
+    def _pdf() -> BaseParser:
+        from paperverifier.parsers.pdf_parser import PDFParser
+        return PDFParser()
+
+    def _docx() -> BaseParser:
+        from paperverifier.parsers.docx_parser import DOCXParser
+        return DOCXParser()
+
+    def _markdown() -> BaseParser:
+        from paperverifier.parsers.markdown_parser import MarkdownParser
+        return MarkdownParser()
+
+    def _latex() -> BaseParser:
+        from paperverifier.parsers.latex_parser import LaTeXParser
+        return LaTeXParser()
+
+    def _github() -> BaseParser:
+        from paperverifier.parsers.github_parser import GitHubParser
+        return GitHubParser()
+
+    def _url() -> BaseParser:
+        from paperverifier.parsers.url_parser import URLParser
+        return URLParser()
+
+    def _text() -> BaseParser:
+        from paperverifier.parsers.text_parser import TextParser
+        return TextParser()
+
+    for name, factory in [
+        ("pdf", _pdf), ("docx", _docx), ("markdown", _markdown),
+        ("latex", _latex), ("github", _github), ("url", _url),
+        ("text", _text),
+    ]:
+        register_parser(name, factory)
+
+
+_register_builtin_parsers()
 
 
 class InputRouter:
@@ -154,8 +217,10 @@ class InputRouter:
                 with zipfile.ZipFile(io.BytesIO(content)) as zf:
                     if "word/document.xml" in zf.namelist():
                         return "docx"
-            except (zipfile.BadZipFile, Exception):
-                pass  # Not a valid ZIP or not a DOCX.
+            except zipfile.BadZipFile:
+                pass  # Not a valid ZIP.
+            except Exception:
+                logger.debug("magic_bytes_zip_check_failed", exc_info=True)
         if content[:4] == b"\xd0\xcf\x11\xe0":
             return "docx"  # Legacy .doc (OLE2).
 
@@ -167,49 +232,27 @@ class InputRouter:
             if text_sample.strip().startswith("#"):
                 return "markdown"
         except Exception:
-            pass
+            logger.debug("magic_bytes_text_check_failed", exc_info=True)
 
         return None
 
     # ------------------------------------------------------------------
-    # Parser instantiation
+    # Parser instantiation (plugin registry)
     # ------------------------------------------------------------------
 
     @staticmethod
     def _instantiate(parser_name: str) -> BaseParser:
-        """Create a parser instance from a type name.
+        """Create a parser instance from the :data:`_PARSER_REGISTRY`.
 
-        Uses deferred imports to avoid loading all parser dependencies
-        when only one is needed.
+        Uses deferred imports (via factory callables) so that parser
+        dependencies are only loaded when actually needed.  New parsers
+        can be added with :func:`register_parser` without modifying this
+        method (Open/Closed Principle).
         """
-        if parser_name == "pdf":
-            from paperverifier.parsers.pdf_parser import PDFParser
-
-            return PDFParser()
-        elif parser_name == "docx":
-            from paperverifier.parsers.docx_parser import DOCXParser
-
-            return DOCXParser()
-        elif parser_name == "markdown":
-            from paperverifier.parsers.markdown_parser import MarkdownParser
-
-            return MarkdownParser()
-        elif parser_name == "latex":
-            from paperverifier.parsers.latex_parser import LaTeXParser
-
-            return LaTeXParser()
-        elif parser_name == "github":
-            from paperverifier.parsers.github_parser import GitHubParser
-
-            return GitHubParser()
-        elif parser_name == "url":
-            from paperverifier.parsers.url_parser import URLParser
-
-            return URLParser()
-        else:
-            from paperverifier.parsers.text_parser import TextParser
-
-            return TextParser()
+        factory = _PARSER_REGISTRY.get(parser_name)
+        if factory is None:
+            factory = _PARSER_REGISTRY["text"]  # Fallback
+        return factory()
 
 
 def _truncate_source(source: str, max_len: int = 100) -> str:
