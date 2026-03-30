@@ -1,0 +1,340 @@
+"""Upload & Parse page -- file upload, URL input, and GitHub import.
+
+Handles document parsing via :class:`InputRouter`, displays a parsed-document
+preview, and launches the verification pipeline via :class:`AgentOrchestrator`.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import nest_asyncio
+import streamlit as st
+
+nest_asyncio.apply()
+
+# ---------------------------------------------------------------------------
+# Async helper
+# ---------------------------------------------------------------------------
+
+
+def run_async(coro: Any) -> Any:
+    """Run an async coroutine from synchronous Streamlit code."""
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(coro)
+
+
+# ---------------------------------------------------------------------------
+# Page header
+# ---------------------------------------------------------------------------
+
+st.header("Upload & Parse")
+st.markdown(
+    "Upload a research paper, provide a URL, or point to a GitHub repository. "
+    "The document will be parsed into a structured representation for analysis."
+)
+
+# ---------------------------------------------------------------------------
+# Session-state defaults
+# ---------------------------------------------------------------------------
+
+for key, default in [
+    ("parsed_document", None),
+    ("verification_report", None),
+    ("selected_items", []),
+    ("applied_feedback", None),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+
+# ---------------------------------------------------------------------------
+# Input methods (tabs)
+# ---------------------------------------------------------------------------
+
+tab_upload, tab_url, tab_github = st.tabs(
+    ["File Upload", "URL Input", "GitHub Repository"]
+)
+
+parsed_document = None
+
+# -- Tab 1: File Upload ---------------------------------------------------
+
+with tab_upload:
+    uploaded_file = st.file_uploader(
+        "Choose a research paper",
+        type=["pdf", "docx", "md", "tex", "txt"],
+        help="Supported formats: PDF, DOCX, Markdown, LaTeX, plain text.",
+    )
+
+    if uploaded_file is not None:
+        st.info(
+            f"**File:** {uploaded_file.name} | "
+            f"**Size:** {uploaded_file.size / 1024:.1f} KB | "
+            f"**Type:** {uploaded_file.type or 'unknown'}"
+        )
+
+        if st.button("Parse Document", key="btn_parse_file"):
+            with st.status("Parsing document...", expanded=True) as status:
+                try:
+                    from paperverifier.parsers.router import InputRouter
+
+                    st.write("Reading file content...")
+                    file_bytes = uploaded_file.read()
+                    file_name = uploaded_file.name
+
+                    # Write to a temp file so the router can detect by extension
+                    suffix = Path(file_name).suffix
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=suffix
+                    ) as tmp:
+                        tmp.write(file_bytes)
+                        tmp_path = tmp.name
+
+                    st.write(f"Routing to parser for *{suffix}* format...")
+                    router = InputRouter()
+                    parsed_document = run_async(
+                        router.parse(tmp_path, content=file_bytes)
+                    )
+
+                    # Clean up temp file
+                    Path(tmp_path).unlink(missing_ok=True)
+
+                    st.session_state["parsed_document"] = parsed_document
+                    status.update(
+                        label="Parsing complete!", state="complete", expanded=False
+                    )
+
+                except Exception as exc:
+                    st.error(f"Failed to parse document: {exc}")
+                    status.update(label="Parsing failed", state="error")
+
+# -- Tab 2: URL Input -----------------------------------------------------
+
+with tab_url:
+    paper_url = st.text_input(
+        "Paper URL",
+        placeholder="https://arxiv.org/abs/2301.12345 or direct PDF link",
+        help="Supports arXiv abstract pages, direct PDF links, and other paper URLs.",
+    )
+
+    if paper_url:
+        if st.button("Fetch & Parse", key="btn_parse_url"):
+            with st.status("Fetching and parsing...", expanded=True) as status:
+                try:
+                    from paperverifier.parsers.router import InputRouter
+
+                    st.write(f"Fetching from URL...")
+                    router = InputRouter()
+                    parsed_document = run_async(router.parse(paper_url))
+
+                    st.session_state["parsed_document"] = parsed_document
+                    status.update(
+                        label="Fetch & parse complete!",
+                        state="complete",
+                        expanded=False,
+                    )
+
+                except Exception as exc:
+                    st.error(f"Failed to fetch or parse URL: {exc}")
+                    status.update(label="Fetch failed", state="error")
+
+# -- Tab 3: GitHub --------------------------------------------------------
+
+with tab_github:
+    github_url = st.text_input(
+        "GitHub Repository URL",
+        placeholder="https://github.com/owner/repo",
+        help="Point to a GitHub repository containing a research paper.",
+    )
+
+    if github_url:
+        if st.button("Clone & Parse", key="btn_parse_github"):
+            with st.status("Cloning and parsing...", expanded=True) as status:
+                try:
+                    from paperverifier.parsers.router import InputRouter
+
+                    st.write("Cloning repository...")
+                    router = InputRouter()
+                    parsed_document = run_async(router.parse(github_url))
+
+                    st.session_state["parsed_document"] = parsed_document
+                    status.update(
+                        label="Clone & parse complete!",
+                        state="complete",
+                        expanded=False,
+                    )
+
+                except Exception as exc:
+                    st.error(f"Failed to clone or parse repository: {exc}")
+                    status.update(label="Clone failed", state="error")
+
+
+# ---------------------------------------------------------------------------
+# Document preview
+# ---------------------------------------------------------------------------
+
+doc = st.session_state.get("parsed_document")
+
+if doc is not None:
+    st.divider()
+    st.subheader("Parsed Document Preview")
+
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Sections", len(doc.sections))
+    with col2:
+        st.metric("References", len(doc.references))
+    with col3:
+        total_sentences = len(doc.get_all_sentences())
+        st.metric("Sentences", f"{total_sentences:,}")
+    with col4:
+        st.metric("Characters", f"{len(doc.full_text):,}")
+
+    if doc.title:
+        st.markdown(f"**Title:** {doc.title}")
+    if doc.authors:
+        st.markdown(f"**Authors:** {', '.join(doc.authors)}")
+    if doc.abstract:
+        with st.expander("Abstract", expanded=False):
+            st.markdown(doc.abstract)
+
+    # Section outline
+    if doc.sections:
+        with st.expander("Section Outline", expanded=True):
+            for section in doc.sections:
+                indent = "  " * (section.level - 1)
+                para_count = len(section.paragraphs)
+                st.markdown(
+                    f"{indent}- **{section.title}** "
+                    f"({para_count} paragraph{'s' if para_count != 1 else ''})"
+                )
+                for sub in section.subsections:
+                    sub_indent = "  " * sub.level
+                    sub_para_count = len(sub.paragraphs)
+                    st.markdown(
+                        f"{sub_indent}- {sub.title} "
+                        f"({sub_para_count} paragraph{'s' if sub_para_count != 1 else ''})"
+                    )
+
+    # References list
+    if doc.references:
+        with st.expander(f"References ({len(doc.references)})", expanded=False):
+            for ref in doc.references[:20]:
+                ref_label = ref.title or ref.raw_text[:100]
+                year_str = f" ({ref.year})" if ref.year else ""
+                st.markdown(f"- {ref_label}{year_str}")
+            if len(doc.references) > 20:
+                st.caption(f"... and {len(doc.references) - 20} more references.")
+
+    # ---------------------------------------------------------------------------
+    # Start verification
+    # ---------------------------------------------------------------------------
+
+    st.divider()
+    st.subheader("Run Verification")
+    st.markdown(
+        "Launch the multi-agent verification pipeline. This will analyse the "
+        "document for structural issues, claim consistency, reference accuracy, "
+        "hallucinations, and more."
+    )
+
+    if st.button("Start Verification", type="primary", key="btn_verify"):
+        # Build client and assignments
+        try:
+            from paperverifier.llm.client import UnifiedLLMClient
+            from paperverifier.llm.config_store import load_role_assignments
+            from paperverifier.llm.roles import AgentRole
+            from paperverifier.agents.orchestrator import AgentOrchestrator
+
+            client = st.session_state.get("llm_client")
+            if client is None:
+                client = UnifiedLLMClient()
+                st.session_state["llm_client"] = client
+
+            assignments = st.session_state.get("role_assignments")
+            if assignments is None:
+                assignments = load_role_assignments()
+                st.session_state["role_assignments"] = assignments
+
+            # Progress tracking via session state
+            agent_statuses: dict[str, str] = {}
+
+            progress_bar = st.progress(0, text="Initializing agents...")
+            status_container = st.container()
+
+            # Build a list of agent role names we expect
+            from paperverifier.agents.orchestrator import _AGENT_CLASSES
+
+            expected_agents = [role.value for role in _AGENT_CLASSES.keys()]
+            total_agents = len(expected_agents)
+
+            async def progress_callback(role_name: str, status: str) -> None:
+                agent_statuses[role_name] = status
+
+            orchestrator = AgentOrchestrator(
+                client=client,
+                assignments=assignments,
+                progress_callback=progress_callback,
+            )
+
+            with st.status(
+                "Running verification pipeline...", expanded=True
+            ) as run_status:
+                for role_name in expected_agents:
+                    st.write(f"Agent queued: **{role_name}**")
+
+                report = run_async(orchestrator.verify(doc))
+
+                st.session_state["verification_report"] = report
+
+                # Display completion info
+                st.write(
+                    f"Completed: {report.agents_completed}/{report.agents_total} agents"
+                )
+                st.write(f"Total findings: {report.total_findings}")
+                st.write(
+                    f"Duration: {report.duration_seconds:.1f}s"
+                )
+
+                run_status.update(
+                    label="Verification complete!", state="complete", expanded=False
+                )
+
+            progress_bar.progress(100, text="Verification complete!")
+
+            # Show summary and link to review
+            st.success(
+                f"Verification finished! Found **{report.total_findings}** findings "
+                f"across **{report.agents_completed}** agents in "
+                f"**{report.duration_seconds:.1f}s**."
+            )
+
+            # Display severity breakdown
+            if report.severity_counts:
+                sev_cols = st.columns(len(report.severity_counts))
+                for idx, (sev, count) in enumerate(
+                    sorted(report.severity_counts.items())
+                ):
+                    with sev_cols[idx]:
+                        st.metric(sev.capitalize(), count)
+
+            st.page_link(
+                "streamlit_app/pages/2_Review.py",
+                label="Go to Review Findings",
+                icon="\u27a1\ufe0f",
+            )
+
+        except Exception as exc:
+            st.error(f"Verification failed: {exc}")
+            import traceback
+
+            with st.expander("Error details"):
+                st.code(traceback.format_exc())
+
+elif st.session_state.get("parsed_document") is None:
+    st.info("Upload a document, enter a URL, or provide a GitHub link to get started.")

@@ -1,0 +1,60 @@
+# PaperVerifier LLM Configuration
+# Copy to llm_config.yaml and customize.
+# API keys should be stored via `paperverifier config` (uses OS keyring)
+# or set as environment variables. Do NOT put real keys in this file.
+
+# Role assignments: map each agent role to a provider + model
+role_assignments:
+  - role: orchestrator
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.2
+    max_tokens: 8192
+
+  - role: research
+    provider: openai
+    model: gpt-4o
+    temperature: 0.1
+    max_tokens: 4096
+
+  - role: claim_verification
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.1
+    max_tokens: 4096
+
+  - role: hallucination_detection
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.1
+    max_tokens: 4096
+
+  - role: section_structure
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.2
+    max_tokens: 4096
+
+  - role: results_consistency
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.1
+    max_tokens: 4096
+
+  - role: novelty_assessment
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.3
+    max_tokens: 4096
+
+  - role: language_flow
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.3
+    max_tokens: 4096
+
+  - role: writer
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    temperature: 0.4
+    max_tokens: 8192
