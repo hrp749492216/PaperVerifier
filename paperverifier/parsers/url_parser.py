@@ -247,10 +247,12 @@ class URLParser(BaseParser):
                 timeout=_DOWNLOAD_TIMEOUT,
             ) as client:
                 # Manually follow redirects with SSRF re-validation (CRIT-2).
+                # Use a single request chain — no duplicate final fetch
+                # (Codex-1 fix #6).
                 current_url = url
                 max_redirects = 5
+                response = await client.get(current_url)
                 for _ in range(max_redirects):
-                    response = await client.get(current_url)
                     if response.status_code in (301, 302, 303, 307, 308):
                         location = response.headers.get("location")
                         if not location:
@@ -259,21 +261,28 @@ class URLParser(BaseParser):
                             )
                         location = urllib.parse.urljoin(current_url, location)
                         current_url = validate_url(location)
+                        response = await client.get(current_url)
                         continue
                     break
                 else:
                     raise InputValidationError(
                         f"Too many redirects (>{max_redirects}) from: {url}"
                     )
-                response = await client.get(current_url)
 
                 if response.status_code != 200:
                     raise InputValidationError(
                         f"Failed to download URL (HTTP {response.status_code}): {url}"
                     )
 
+                # Check Content-Length header before buffering body.
+                cl = response.headers.get("content-length")
+                if cl and int(cl) > _MAX_DOWNLOAD_SIZE:
+                    raise InputValidationError(
+                        f"File too large: {int(cl):,} bytes "
+                        f"(max {_MAX_DOWNLOAD_SIZE:,})."
+                    )
+
                 content_type = response.headers.get("content-type", "")
-                # Strip charset and other parameters.
                 content_type = content_type.split(";")[0].strip()
                 final_url = str(response.url)
 

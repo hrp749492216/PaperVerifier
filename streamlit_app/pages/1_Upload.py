@@ -282,16 +282,17 @@ if doc is not None:
             # HIGH-U2 / CRIT-10: Track progress with actual updates and
             # run the verification in a background thread so we don't
             # block the Streamlit server.
-            agent_statuses: dict[str, str] = {}
-            completed_count = 0
+            # Use a mutable dict for progress state since module-scope
+            # variables cannot be accessed via `nonlocal` (Codex-1 fix #1).
+            progress_state: dict[str, object] = {"count": 0, "statuses": {}}
 
             progress_bar = st.progress(0, text="Initializing agents...")
 
             async def progress_callback(role_name: str, status: str) -> None:
-                nonlocal completed_count
-                agent_statuses[role_name] = status
+                statuses = progress_state["statuses"]
+                statuses[role_name] = status  # type: ignore[union-attr]
                 if status in ("completed", "failed", "disabled"):
-                    completed_count += 1
+                    progress_state["count"] = int(progress_state["count"]) + 1  # type: ignore[arg-type]
 
             orchestrator = AgentOrchestrator(
                 client=client,
@@ -303,12 +304,37 @@ if doc is not None:
             result_holder: dict[str, object] = {}
 
             def _run_verification() -> None:
-                """Run the async verification in a dedicated thread."""
+                """Run the async verification in a dedicated thread.
+
+                Creates a fresh event loop for the thread since
+                asyncio.get_event_loop() may fail in non-main threads
+                on Python 3.10+ (Codex-1 fix #4).
+                """
+                import asyncio as _asyncio
+                import nest_asyncio as _nest_asyncio
+
+                loop = _asyncio.new_event_loop()
+                _nest_asyncio.apply(loop)
                 try:
-                    report = run_async(orchestrator.verify(doc))
+                    # Enrich document with external API evidence
+                    # before running verification (Codex-1 fix #3).
+                    from paperverifier.external.enrichment import enrich_document
+
+                    try:
+                        external_data = loop.run_until_complete(
+                            enrich_document(doc)
+                        )
+                    except Exception:
+                        external_data = {}
+
+                    report = loop.run_until_complete(
+                        orchestrator.verify(doc, external_data=external_data)
+                    )
                     result_holder["report"] = report
                 except Exception as thread_exc:
                     result_holder["error"] = thread_exc
+                finally:
+                    loop.close()
 
             with st.status(
                 "Running verification pipeline...", expanded=True
@@ -323,10 +349,11 @@ if doc is not None:
                 # HIGH-U2: Poll and update progress bar while worker runs
                 import time
                 while worker.is_alive():
-                    done = completed_count
+                    done = int(progress_state["count"])  # type: ignore[arg-type]
                     pct = int((done / total_agents) * 100) if total_agents else 0
+                    statuses = progress_state["statuses"]
                     running = [
-                        name for name, s in agent_statuses.items() if s == "running"
+                        name for name, s in statuses.items() if s == "running"  # type: ignore[union-attr]
                     ]
                     label = (
                         f"Running: {', '.join(running)}... ({done}/{total_agents} done)"

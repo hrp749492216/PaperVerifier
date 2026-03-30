@@ -221,6 +221,29 @@ async def _verify(
         progress_callback=progress_callback,
     )
 
+    # Enrich document with external API evidence (Codex-1 fix #3).
+    external_data: dict[str, object] = {}
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+        transient=True,
+    ) as progress:
+        enrich_task = progress.add_task(
+            description="Looking up references via external APIs...", total=None,
+        )
+        try:
+            from paperverifier.external.enrichment import enrich_document
+
+            external_data = await enrich_document(document)
+            progress.update(enrich_task, visible=False)
+        except Exception as exc:
+            progress.update(enrich_task, visible=False)
+            if verbose:
+                error_console.print(
+                    f"[yellow]External enrichment failed (non-fatal):[/] {exc}"
+                )
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -231,7 +254,7 @@ async def _verify(
             description="Running verification agents...", total=None,
         )
         try:
-            report = await orchestrator.verify(document)
+            report = await orchestrator.verify(document, external_data=external_data)
         except Exception as exc:
             error_console.print(f"[red]Verification failed:[/] {exc}")
             if verbose:

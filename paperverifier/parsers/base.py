@@ -177,19 +177,37 @@ class BaseParser(ABC):
             sentences: list[Sentence] = []
             sentence_texts = self._split_into_sentences(raw_para)
 
-            sent_offset = char_offset
+            # Compute sentence offsets by locating each sentence within the
+            # raw paragraph text rather than advancing by normalized length.
+            # This avoids offset drift from whitespace normalization
+            # (Codex-1 fix #5).
+            search_start = 0
             for sent_idx, sent_text in enumerate(sentence_texts, start=1):
                 sent_id = f"{para_id}.sent-{sent_idx}"
-                sent_end = sent_offset + len(sent_text)
+                # Find the sentence in the raw paragraph text.
+                # Collapse whitespace in both sides for matching.
+                pos = raw_para.find(sent_text, search_start)
+                if pos == -1:
+                    # Fallback: try matching with collapsed whitespace.
+                    import re as _re
+                    collapsed_para = _re.sub(r"\s+", " ", raw_para[search_start:])
+                    collapsed_sent = _re.sub(r"\s+", " ", sent_text)
+                    sub_pos = collapsed_para.find(collapsed_sent)
+                    if sub_pos != -1:
+                        pos = search_start + sub_pos
+                    else:
+                        pos = search_start
+                sent_start_abs = char_offset + pos
+                sent_end_abs = sent_start_abs + len(sent_text)
                 sentences.append(
                     Sentence(
                         id=sent_id,
                         text=sent_text,
-                        start_char=sent_offset,
-                        end_char=sent_end,
+                        start_char=sent_start_abs,
+                        end_char=sent_end_abs,
                     )
                 )
-                sent_offset = sent_end + 1  # +1 for inter-sentence space.
+                search_start = pos + len(sent_text)
 
             para_end = char_offset + len(raw_para)
             paragraphs.append(

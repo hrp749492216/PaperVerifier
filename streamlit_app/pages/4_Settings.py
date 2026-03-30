@@ -59,8 +59,9 @@ for provider in LLMProvider:
     spec = PROVIDER_REGISTRY[provider]
     is_configured = provider in configured_providers
 
+    status_icon = "\u2705" if is_configured else "\u274c"
     with st.expander(
-        f"{'\u2705' if is_configured else '\u274c'} {spec.display_name}",
+        f"{status_icon} {spec.display_name}",
         expanded=False,
     ):
         st.caption(f"Environment variable: `{spec.env_var}`")

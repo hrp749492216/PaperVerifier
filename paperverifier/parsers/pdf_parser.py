@@ -97,12 +97,22 @@ class PDFParser(BaseParser):
             )
 
         # Use pdfplumber for extraction (PyMuPDF removed due to AGPL license).
+        # Distinguish between "library not installed" and "extraction failed"
+        # so operators get the correct remediation guidance (Codex-1 fix #7).
         text, sections, metadata = self._try_pdfplumber(pdf_bytes)
 
         if text is None:
-            raise RuntimeError(
-                "pdfplumber is required for PDF parsing. "
-                "Install with: pip install pdfplumber"
+            try:
+                import pdfplumber  # noqa: F401,PLC0415
+            except ImportError:
+                raise RuntimeError(
+                    "pdfplumber is required for PDF parsing. "
+                    "Install with: pip install pdfplumber"
+                )
+            # pdfplumber is installed but extraction failed.
+            raise InputValidationError(
+                "PDF text extraction failed. The file may be corrupted, "
+                "image-only (scanned), or in an unsupported format."
             )
 
         # Quality check.
