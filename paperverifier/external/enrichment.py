@@ -38,16 +38,28 @@ async def enrich_document(document: ParsedDocument) -> dict[str, Any]:
     api_results: dict[str, Any] = {}
     related_works: list[dict[str, Any]] = []
 
+    # Cap concurrency to avoid flooding external APIs (Codex-2).
+    _MAX_CONCURRENT_LOOKUPS = 10
+    sem = asyncio.Semaphore(_MAX_CONCURRENT_LOOKUPS)
+
+    async def _bounded_lookup(
+        ref: Reference,
+        crossref: CrossRefClient,
+        openalex: OpenAlexClient,
+        s2: SemanticScholarClient,
+    ) -> dict[str, Any] | None:
+        async with sem:
+            return await _lookup_reference(ref, crossref, openalex, s2)
+
     async with CrossRefClient(email=settings.crossref_email) as crossref, \
                OpenAlexClient(email=settings.openalex_email) as openalex, \
                SemanticScholarClient(api_key=settings.semantic_scholar_api_key) as s2:
 
         # 1. Look up references by DOI and title
         ref_tasks = [
-            _lookup_reference(ref, crossref, openalex, s2)
+            _bounded_lookup(ref, crossref, openalex, s2)
             for ref in document.references
         ]
-        # Cap concurrency to avoid flooding external APIs.
         results = await asyncio.gather(*ref_tasks, return_exceptions=True)
 
         for ref, result in zip(document.references, results):

@@ -491,23 +491,52 @@ class FeedbackApplier:
 
         if actual != change.original_text:
             # Positional mismatch -- attempt to re-locate the original text
-            # in the current version of the document.
+            # within a bounded window around the original offset to avoid
+            # silently matching the wrong duplicate (Codex-2).
             logger.warning(
                 "feedback_text_position_mismatch_retrying",
                 item_number=change.item_number,
                 expected=change.original_text[:80],
                 actual=actual[:80],
             )
-            idx = text.find(change.original_text)
-            if idx == -1:
-                logger.error(
-                    "feedback_text_not_found",
-                    item_number=change.item_number,
-                    expected=change.original_text[:80],
-                )
-                return None
-            start = idx
-            end = idx + len(change.original_text)
+            # Search within ±500 chars of the original position first.
+            window_start = max(0, change.start_char - 500)
+            window_end = min(len(text), change.end_char + 500)
+            window = text[window_start:window_end]
+            idx = window.find(change.original_text)
+            if idx != -1:
+                # Reject ambiguous matches: if the same text appears more
+                # than once in the window, we cannot be sure which is correct.
+                second = window.find(change.original_text, idx + 1)
+                if second != -1:
+                    logger.error(
+                        "feedback_text_ambiguous_match",
+                        item_number=change.item_number,
+                        expected=change.original_text[:80],
+                    )
+                    return None
+                start = window_start + idx
+                end = start + len(change.original_text)
+            else:
+                # Fallback: search the full document but still reject
+                # ambiguous matches.
+                full_idx = text.find(change.original_text)
+                if full_idx == -1:
+                    logger.error(
+                        "feedback_text_not_found",
+                        item_number=change.item_number,
+                        expected=change.original_text[:80],
+                    )
+                    return None
+                if text.find(change.original_text, full_idx + 1) != -1:
+                    logger.error(
+                        "feedback_text_ambiguous_match",
+                        item_number=change.item_number,
+                        expected=change.original_text[:80],
+                    )
+                    return None
+                start = full_idx
+                end = full_idx + len(change.original_text)
             # Update the change record so downstream consumers see the
             # corrected positions.
             change.start_char = start

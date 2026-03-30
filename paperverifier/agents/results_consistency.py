@@ -15,7 +15,8 @@ from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument, Section
 from paperverifier.models.findings import Finding
-from paperverifier.utils.chunking import create_document_summary
+from paperverifier.utils.chunking import create_document_summary, get_context_window
+from paperverifier.utils.text import count_tokens_estimate, truncate_to_token_limit
 from paperverifier.utils.prompts import get_prompts
 
 from paperverifier.agents.base import BaseAgent
@@ -139,6 +140,31 @@ class ResultsConsistencyAgent(BaseAgent):
             results_sections=len(results_sections),
             conclusion_sections=len(conclusion_sections),
         )
+
+        # Guard against context overflow: if the combined section text
+        # is too large for the model, truncate each section proportionally
+        # (Codex-2).
+        combined_tokens = count_tokens_estimate(
+            methodology_text + results_text + conclusion_text
+        )
+        context_window = get_context_window(self._assignment.model)
+        # Reserve tokens for system prompt, user template, and response.
+        max_section_tokens = (context_window - 4_000) // 3
+        if combined_tokens > context_window - 4_000:
+            self._logger.warning(
+                "results_consistency_truncating",
+                combined_tokens=combined_tokens,
+                max_per_section=max_section_tokens,
+            )
+            methodology_text = truncate_to_token_limit(
+                methodology_text, max_section_tokens,
+            )
+            results_text = truncate_to_token_limit(
+                results_text, max_section_tokens,
+            )
+            conclusion_text = truncate_to_token_limit(
+                conclusion_text, max_section_tokens,
+            )
 
         # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
         user_msg = user_template.format(

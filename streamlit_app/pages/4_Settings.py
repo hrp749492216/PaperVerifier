@@ -110,9 +110,12 @@ for provider in LLMProvider:
                             from paperverifier.llm.client import UnifiedLLMClient
 
                             test_client = UnifiedLLMClient()
-                            # If user typed a key but hasn't saved, set it temporarily
+                            # If user typed a key but hasn't saved, set it in
+                            # memory only -- do NOT persist to keyring (Codex-2).
                             if key_input.strip():
-                                test_client.set_api_key(provider, key_input.strip())
+                                test_client.set_api_key(
+                                    provider, key_input.strip(), persist=False,
+                                )
 
                             success = run_async(
                                 test_client.test_connection(provider)

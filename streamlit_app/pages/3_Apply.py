@@ -166,11 +166,22 @@ if st.button("Apply Changes", type="primary", key="btn_apply"):
             )
 
         except Exception as exc:
-            st.error(f"Failed to apply feedback: {exc}")
+            # Log full traceback server-side; show only sanitized
+            # message to users (Codex-2).
+            import logging
             import traceback
+            import uuid
 
-            with st.expander("Error details"):
-                st.code(traceback.format_exc())
+            error_id = uuid.uuid4().hex[:8]
+            logging.getLogger(__name__).error(
+                "feedback_apply_failed error_id=%s\n%s",
+                error_id,
+                traceback.format_exc(),
+            )
+            st.error(
+                f"Failed to apply feedback: {exc}\n\n"
+                f"If this persists, contact support with error ID: `{error_id}`"
+            )
             status.update(label="Application failed", state="error")
 
 # ---------------------------------------------------------------------------

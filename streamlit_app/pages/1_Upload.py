@@ -143,6 +143,11 @@ with tab_url:
                     router = InputRouter()
                     parsed_document = run_async(router.parse(paper_url))
 
+                    # Clear stale downstream state on new parse (Codex-2).
+                    st.session_state["verification_report"] = None
+                    st.session_state["selected_items"] = []
+                    st.session_state["applied_feedback"] = None
+
                     st.session_state["parsed_document"] = parsed_document
                     status.update(
                         label="Fetch & parse complete!",
@@ -172,6 +177,11 @@ with tab_github:
                     st.write("Cloning repository...")
                     router = InputRouter()
                     parsed_document = run_async(router.parse(github_url))
+
+                    # Clear stale downstream state on new parse (Codex-2).
+                    st.session_state["verification_report"] = None
+                    st.session_state["selected_items"] = []
+                    st.session_state["applied_feedback"] = None
 
                     st.session_state["parsed_document"] = parsed_document
                     status.update(
@@ -410,15 +420,22 @@ if doc is not None:
             )
 
         except Exception as exc:
-            # HIGH-S4: Show only the error message to users; hide stack
-            # traces behind a debug expander to avoid leaking file paths.
-            st.error(f"Verification failed: {exc}")
-            import traceback
+            # Show only a sanitized error message to users; log full
+            # traceback server-side only (Codex-2).
             import logging
+            import traceback
+            import uuid
 
-            logging.getLogger(__name__).error(traceback.format_exc())
-            with st.expander("Debug details (for developers)"):
-                st.code(traceback.format_exc())
+            error_id = uuid.uuid4().hex[:8]
+            logging.getLogger(__name__).error(
+                "verification_failed error_id=%s\n%s",
+                error_id,
+                traceback.format_exc(),
+            )
+            st.error(
+                f"Verification failed: {exc}\n\n"
+                f"If this persists, contact support with error ID: `{error_id}`"
+            )
 
 elif st.session_state.get("parsed_document") is None:
     st.info("Upload a document, enter a URL, or provide a GitHub link to get started.")

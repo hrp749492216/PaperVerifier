@@ -132,10 +132,27 @@ class UnifiedLLMClient:
             provider=provider.value,
         )
 
-    def set_api_key(self, provider: LLMProvider, key: str) -> None:
-        """Persist an API key in the runtime cache *and* the OS keyring."""
+    def set_api_key(
+        self, provider: LLMProvider, key: str, *, persist: bool = True,
+    ) -> None:
+        """Store an API key in the runtime cache, optionally persisting to keyring.
+
+        Parameters
+        ----------
+        provider:
+            The LLM provider to set the key for.
+        key:
+            The API key value.
+        persist:
+            If ``True`` (default), also write the key to the OS keyring.
+            Set to ``False`` for ephemeral use (e.g. connection tests)
+            so a previously saved key is not overwritten.
+        """
         self._api_keys[provider] = key
         log_api_key_access(provider.value, "write")
+        if not persist:
+            logger.debug("api_key_set_memory_only", provider=provider.value)
+            return
         try:
             import keyring  # noqa: PLC0415
 

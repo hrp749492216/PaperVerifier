@@ -474,8 +474,9 @@ class AgentOrchestrator:
             )
             report.agent_reports.append(orch_report)
 
-        # Compute summary statistics and generate feedback items
+        # Compute summary statistics, cost estimate, and feedback items
         report.compute_severity_counts()
+        report.compute_estimated_cost()
         report.generate_feedback_items()
 
         # Generate summary text

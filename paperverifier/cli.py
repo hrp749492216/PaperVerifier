@@ -339,16 +339,19 @@ async def _verify(
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option("--diff", "show_diff", is_flag=True,
               help="Show diff instead of writing output")
+@click.option("--force", is_flag=True, default=False,
+              help="Force apply even when conflicting items are detected")
 def apply(input_path: str, report_path: str, items: str,
-          output: str | None, show_diff: bool):
+          output: str | None, show_diff: bool, force: bool):
     """Apply selected feedback items to a paper.
 
     \b
     Examples:
-      paperverifier apply paper.pdf report.json --items 1,3,5 -o paper_fixed.pdf
-      paperverifier apply paper.pdf report.json --items 1-8 --diff
+      paperverifier apply paper.txt report.json --items 1,3,5 -o paper_fixed.txt
+      paperverifier apply paper.md report.json --items 1-8 --diff
+      paperverifier apply paper.txt report.json --items 1-8 --force
     """
-    asyncio.run(_apply(input_path, report_path, items, output, show_diff))
+    asyncio.run(_apply(input_path, report_path, items, output, show_diff, force))
 
 
 async def _apply(
@@ -357,6 +360,7 @@ async def _apply(
     items_str: str,
     output: str | None,
     show_diff: bool,
+    force: bool = False,
 ) -> None:
     from paperverifier.feedback.applier import FeedbackApplier, FeedbackConflictError
     from paperverifier.feedback.diff_generator import DiffGenerator
@@ -438,7 +442,7 @@ async def _apply(
         progress.add_task(description="Applying feedback...", total=None)
         try:
             result = await applier.apply(
-                document, report, selected_items, force=True,
+                document, report, selected_items, force=force,
             )
         except FeedbackConflictError as exc:
             error_console.print(f"[red]Conflict detected:[/] {exc}")
@@ -485,6 +489,15 @@ async def _apply(
             console.print("[dim]No changes were made.[/dim]")
     elif output:
         output_path = Path(output)
+        # Only text-based output formats are supported (Codex-2).
+        _UNSUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".odt", ".rtf"}
+        if output_path.suffix.lower() in _UNSUPPORTED_EXTENSIONS:
+            error_console.print(
+                f"[red]Error:[/] Output format '{output_path.suffix}' is not supported. "
+                "Only text-based formats (.txt, .md, .tex) are currently supported "
+                "for feedback application."
+            )
+            sys.exit(1)
         try:
             output_path.write_text(result.modified_text, encoding="utf-8")
             console.print(f"[green]Modified document saved to:[/] {output_path.resolve()}")
