@@ -36,7 +36,7 @@ from paperverifier.models.findings import Finding
 from paperverifier.models.report import AgentReport, VerificationReport
 from paperverifier.utils.chunking import create_document_summary
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
-from paperverifier.utils.prompts import get_prompts
+from paperverifier.utils.prompts import escape_xml_content, get_prompts
 
 logger = structlog.get_logger(__name__)
 
@@ -382,10 +382,25 @@ class AgentOrchestrator:
         document_summary = create_document_summary(document)
         findings_text = self._format_findings_for_synthesis(all_findings)
 
-        # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).
+        # Escape XML-special characters and curly braces, then wrap in
+        # untrusted-content boundaries to mitigate prompt injection (F001).
+        safe_summary = escape_xml_content(document_summary).replace("{", "{{").replace("}", "}}")
+        safe_findings = escape_xml_content(findings_text).replace("{", "{{").replace("}", "}}")
+
+        wrapped_summary = (
+            "<untrusted_document_summary>\n"
+            + safe_summary + "\n"
+            "</untrusted_document_summary>"
+        )
+        wrapped_findings = (
+            "<untrusted_agent_findings>\n"
+            + safe_findings + "\n"
+            "</untrusted_agent_findings>"
+        )
+
         user_msg = user_template.format(
-            document_summary=document_summary.replace("{", "{{").replace("}", "}}"),
-            all_findings=findings_text.replace("{", "{{").replace("}", "}}"),
+            document_summary=wrapped_summary,
+            all_findings=wrapped_findings,
         )
 
         messages = [

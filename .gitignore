@@ -45,3 +45,6 @@ temp_uploads/
 # Database
 *.db
 *.sqlite3
+
+# Audit artifacts (generated locally, may contain host metadata)
+.audit/

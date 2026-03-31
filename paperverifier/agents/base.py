@@ -317,8 +317,7 @@ class BaseAgent:
         summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
-        all_findings: list[Finding] = []
-        for chunk in chunks:
+        async def _process_chunk(chunk: DocumentChunk) -> list[Finding]:
             user_msg = self._format_user_prompt(
                 user_template, document, chunk, summary, **kwargs,
             )
@@ -327,7 +326,14 @@ class BaseAgent:
                 Message(role="user", content=user_msg),
             ]
             response = await self._call_llm(messages)
-            findings = self._parse_findings(response)
+            return self._parse_findings(response)
+
+        chunk_results = await asyncio.gather(
+            *(_process_chunk(c) for c in chunks),
+        )
+
+        all_findings: list[Finding] = []
+        for findings in chunk_results:
             all_findings.extend(findings)
 
         return all_findings
