@@ -127,17 +127,31 @@ def require_auth() -> None:
 
     if not expected_password:
         # Fail closed unless explicitly running in insecure local dev mode.
-        if os.environ.get("PV_ALLOW_INSECURE_LOCAL") == "1":
+        insecure_local = os.environ.get("PV_ALLOW_INSECURE_LOCAL") == "1"
+        environment = os.environ.get("PV_ENVIRONMENT", "production").lower()
+
+        if insecure_local and environment in {"local", "dev", "development"}:
             st.sidebar.warning(
                 "Running in insecure local mode (no authentication). "
                 "Set `PV_APP_PASSWORD` to enable login.",
                 icon="\u26a0\ufe0f",
             )
             return
-        st.error(
-            "`PV_APP_PASSWORD` must be set. For local development, "
-            "set `PV_ALLOW_INSECURE_LOCAL=1` to bypass authentication."
-        )
+
+        if insecure_local:
+            # Insecure flag set outside local/dev — likely a misconfiguration.
+            st.error(
+                "`PV_ALLOW_INSECURE_LOCAL` is enabled but `PV_ENVIRONMENT` "
+                f"is '{environment}'. Insecure mode is only allowed when "
+                "`PV_ENVIRONMENT` is 'local' or 'dev'. "
+                "Set `PV_APP_PASSWORD` for non-local deployments."
+            )
+        else:
+            st.error(
+                "`PV_APP_PASSWORD` must be set. For local development, "
+                "set `PV_ALLOW_INSECURE_LOCAL=1` and `PV_ENVIRONMENT=local` "
+                "to bypass authentication."
+            )
         st.stop()
 
     # Already authenticated this session.

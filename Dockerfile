@@ -4,12 +4,15 @@ FROM python:3.11-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install system dependencies (pandoc for LaTeX support, tini for PID 1)
+# Install system dependencies (tini for PID 1, pandoc pinned to >=3.1.6 for CVE-2023-38745)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        pandoc \
         curl \
         tini \
+    && curl -L -o /tmp/pandoc.deb \
+        https://github.com/jgm/pandoc/releases/download/3.6.4/pandoc-3.6.4-1-amd64.deb \
+    && dpkg -i /tmp/pandoc.deb \
+    && rm -f /tmp/pandoc.deb \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

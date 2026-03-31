@@ -104,11 +104,11 @@ class PDFParser(BaseParser):
         if text is None:
             try:
                 import pdfplumber  # noqa: F401,PLC0415
-            except ImportError:
+            except ImportError as exc:
                 raise RuntimeError(
                     "pdfplumber is required for PDF parsing. "
                     "Install with: pip install pdfplumber"
-                )
+                ) from exc
             # pdfplumber is installed but extraction failed.
             raise InputValidationError(
                 "PDF text extraction failed. The file may be corrupted, "
@@ -173,48 +173,45 @@ class PDFParser(BaseParser):
             logger.debug("pdfplumber_not_available")
             return None, [], {}
 
+        text_parts: list[str] = []
+        metadata: dict[str, Any] = {}
+
         try:
-            pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                try:
+                    raw_meta = pdf.metadata or {}
+                    for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
+                        val = raw_meta.get(key)
+                        if val:
+                            metadata[key.lower()] = val
+                except Exception:
+                    pass
+
+                # Enforce page limit (MED-S4).
+                from paperverifier.config import get_settings
+                max_pages = get_settings().max_document_pages
+                pages_to_process = pdf.pages[:max_pages]
+                if len(pdf.pages) > max_pages:
+                    logger.warning(
+                        "pdf_page_limit",
+                        total_pages=len(pdf.pages),
+                        max_pages=max_pages,
+                    )
+
+                for page in pages_to_process:
+                    try:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text_parts.append(page_text)
+                    except Exception as exc:
+                        logger.warning(
+                            "pdfplumber_page_error",
+                            page=page.page_number,
+                            error=str(exc),
+                        )
         except Exception as exc:
             logger.warning("pdfplumber_open_failed", error=str(exc))
             return None, [], {}
-
-        text_parts: list[str] = []
-        try:
-            metadata: dict[str, Any] = {}
-            try:
-                raw_meta = pdf.metadata or {}
-                for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
-                    val = raw_meta.get(key)
-                    if val:
-                        metadata[key.lower()] = val
-            except Exception:
-                pass
-
-            # Enforce page limit (MED-S4).
-            from paperverifier.config import get_settings
-            max_pages = get_settings().max_document_pages
-            pages_to_process = pdf.pages[:max_pages]
-            if len(pdf.pages) > max_pages:
-                logger.warning(
-                    "pdf_page_limit",
-                    total_pages=len(pdf.pages),
-                    max_pages=max_pages,
-                )
-
-            for page in pages_to_process:
-                try:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(page_text)
-                except Exception as exc:
-                    logger.warning(
-                        "pdfplumber_page_error",
-                        page=page.page_number,
-                        error=str(exc),
-                    )
-        finally:
-            pdf.close()
 
         if not text_parts:
             return None, [], metadata

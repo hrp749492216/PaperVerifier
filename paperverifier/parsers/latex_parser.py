@@ -465,6 +465,20 @@ class LaTeXParser(BaseParser):
             logger.debug("pypandoc_not_available")
             return None
 
+        # Guard against Pandoc versions vulnerable to CVE-2023-38745.
+        try:
+            version_str = pypandoc.get_pandoc_version()
+            version_parts = tuple(int(x) for x in version_str.split(".")[:3])
+            if version_parts < (3, 1, 6):
+                logger.warning(
+                    "pandoc_version_too_old",
+                    version=version_str,
+                    minimum="3.1.6",
+                )
+                return None
+        except Exception:
+            logger.debug("pandoc_version_check_failed")
+
         try:
             plain = pypandoc.convert_text(text, "plain", format="latex")
         except Exception as exc:

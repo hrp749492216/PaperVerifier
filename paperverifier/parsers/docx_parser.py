@@ -60,11 +60,11 @@ class DOCXParser(BaseParser):
         """
         try:
             import docx  # type: ignore[import-untyped]
-        except ImportError:
+        except ImportError as exc:
             raise RuntimeError(
                 "python-docx is required for DOCX parsing. "
                 "Install it with: pip install python-docx"
-            )
+            ) from exc
 
         source_path = ""
 
@@ -113,8 +113,12 @@ class DOCXParser(BaseParser):
                 metadata["subject"] = props.subject
             if props.keywords:
                 metadata["keywords"] = props.keywords
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "docx_core_properties_unavailable",
+                error=str(exc),
+                exc_info=True,
+            )
 
         # Walk paragraphs and build section structure.
         sections, full_text = self._extract_sections(doc)
