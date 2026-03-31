@@ -19,17 +19,6 @@ from typing import Any, Awaitable, Callable
 
 import structlog
 
-from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
-from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument
-from paperverifier.models.findings import Finding
-from paperverifier.models.report import AgentReport, VerificationReport
-from paperverifier.utils.chunking import create_document_summary
-from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
-from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.audit import log_verification_start, log_verification_complete
-from paperverifier.config import bind_request_id
 from paperverifier.agents.base import BaseAgent
 from paperverifier.agents.claim_verification import ClaimVerificationAgent
 from paperverifier.agents.hallucination_detection import HallucinationDetectionAgent
@@ -38,6 +27,16 @@ from paperverifier.agents.novelty_assessment import NoveltyAssessmentAgent
 from paperverifier.agents.reference_verification import ReferenceVerificationAgent
 from paperverifier.agents.results_consistency import ResultsConsistencyAgent
 from paperverifier.agents.section_structure import SectionStructureAgent
+from paperverifier.audit import log_verification_complete, log_verification_start
+from paperverifier.config import bind_request_id
+from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
+from paperverifier.llm.roles import AgentRole, RoleAssignment
+from paperverifier.models.document import ParsedDocument
+from paperverifier.models.findings import Finding
+from paperverifier.models.report import AgentReport, VerificationReport
+from paperverifier.utils.chunking import create_document_summary
+from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
+from paperverifier.utils.prompts import get_prompts
 
 logger = structlog.get_logger(__name__)
 
@@ -120,7 +119,7 @@ class AgentOrchestrator:
             verification) and ``related_works`` (for novelty assessment).
         """
         # Bind a correlation ID for all log entries in this verification run.
-        request_id = bind_request_id()
+        bind_request_id()
 
         pipeline_start = time.monotonic()
         external_data = external_data or {}

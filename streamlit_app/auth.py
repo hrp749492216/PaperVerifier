@@ -28,7 +28,6 @@ from collections import defaultdict
 
 import streamlit as st
 
-
 # ---------------------------------------------------------------------------
 # Brute-force login throttler
 # ---------------------------------------------------------------------------

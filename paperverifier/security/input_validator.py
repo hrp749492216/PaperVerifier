@@ -179,7 +179,7 @@ def _resolve_and_check_ip(hostname: str) -> str:
         raise InputValidationError(f"DNS resolution returned no addresses for '{hostname}'.")
 
     first_ip: str | None = None
-    for family, _type, _proto, _canonname, sockaddr in addrinfos:
+    for _family, _type, _proto, _canonname, sockaddr in addrinfos:
         ip_str = sockaddr[0]
         try:
             addr = ipaddress.ip_address(ip_str)
@@ -213,7 +213,7 @@ def _check_hostname_ip(hostname: str) -> None:
     if not addrinfos:
         raise InputValidationError(f"DNS resolution returned no addresses for '{hostname}'.")
 
-    for family, _type, _proto, _canonname, sockaddr in addrinfos:
+    for _family, _type, _proto, _canonname, sockaddr in addrinfos:
         ip_str = sockaddr[0]
         try:
             addr = ipaddress.ip_address(ip_str)

@@ -21,7 +21,6 @@ from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
     resolve_and_validate_url,
-    validate_url,
 )
 
 logger = structlog.get_logger(__name__)

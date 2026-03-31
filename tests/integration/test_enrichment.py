@@ -14,7 +14,6 @@ import pytest
 from paperverifier.external.enrichment import enrich_document
 from paperverifier.models.document import ParsedDocument, Reference
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

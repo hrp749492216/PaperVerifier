@@ -10,12 +10,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from paperverifier.cli import cli
 from paperverifier.models.report import VerificationReport
-
 
 # ---------------------------------------------------------------------------
 # Helpers
