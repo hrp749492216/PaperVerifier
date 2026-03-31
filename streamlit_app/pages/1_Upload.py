@@ -17,6 +17,7 @@ import streamlit as st
 from streamlit_app.auth import require_auth
 from streamlit_app.rate_limit import SessionRateLimiter
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
+from paperverifier.config import get_settings
 
 require_auth()
 
@@ -26,7 +27,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_UPLOAD_SIZE_MB = 50
+# Use the configurable setting so the UI limit matches validate_uploaded_file.
+_settings = get_settings()
+MAX_UPLOAD_SIZE_MB = _settings.max_document_size_mb
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 # Per-session verification rate limiter (10 requests per hour).
