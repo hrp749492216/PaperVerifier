@@ -257,6 +257,33 @@ def setup_logging(level: str = "INFO", fmt: str = "json") -> None:
 
 
 # ---------------------------------------------------------------------------
+# Correlation / Request ID
+# ---------------------------------------------------------------------------
+
+
+def bind_request_id(request_id: str | None = None) -> str:
+    """Bind a correlation ID to the current context for structured logging.
+
+    If *request_id* is not provided, a short UUID is generated.  The ID
+    is bound via ``structlog.contextvars`` so all subsequent log entries
+    in the same async/thread context automatically include it.
+
+    Returns the bound request ID.
+    """
+    import uuid as _uuid
+
+    rid = request_id or _uuid.uuid4().hex[:8]
+    structlog.contextvars.bind_contextvars(request_id=rid)
+    return rid
+
+
+def get_request_id() -> str | None:
+    """Return the currently bound request ID, or None if unbound."""
+    ctx = structlog.contextvars.get_contextvars()
+    return ctx.get("request_id")
+
+
+# ---------------------------------------------------------------------------
 # Deferred logging setup -- call setup_logging() explicitly rather than
 # at import time so that it does not override user configuration (MED-I9).
 # ---------------------------------------------------------------------------
