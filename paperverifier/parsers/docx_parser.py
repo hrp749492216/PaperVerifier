@@ -164,11 +164,19 @@ class DOCXParser(BaseParser):
         Returns:
             A tuple of ``(sections, full_text)``.
         """
-        section_data: list[tuple[str, int, list[str]]] = []
+        # section_data now includes the pre-computed character offset for each
+        # section's start position in full_text, avoiding reverse-search with
+        # find() which fails for synthetic headings like "Document".
+        section_data: list[tuple[str, int, list[str], int]] = []
         current_heading = "Document"
         current_level = 1
         current_paragraphs: list[str] = []
         full_text_parts: list[str] = []
+        # Track the character offset where the current section starts.
+        # This is set when a section's first content paragraph is appended.
+        current_section_start: int | None = None
+        # Running character length of full_text as parts are appended.
+        char_cursor = 0
 
         for para in doc.paragraphs:
             style_name = para.style.name if para.style else ""
@@ -183,23 +191,41 @@ class DOCXParser(BaseParser):
                 # Save previous section.
                 if current_paragraphs:
                     section_data.append(
-                        (current_heading, current_level, current_paragraphs)
+                        (current_heading, current_level, current_paragraphs,
+                         current_section_start if current_section_start is not None else char_cursor)
                     )
                 current_heading = text
                 current_level = heading_level
                 current_paragraphs = []
+                # The heading itself marks the start of the new section.
+                # Record current char_cursor before appending.
+                current_section_start = char_cursor
+                # Account for the "\n\n" separator between parts.
+                if full_text_parts:
+                    char_cursor += 2  # len("\n\n")
                 full_text_parts.append(text)
+                char_cursor += len(text)
             elif heading_level == 0:
                 # Title / Subtitle -- store but don't create a section.
+                if full_text_parts:
+                    char_cursor += 2
                 full_text_parts.append(text)
+                char_cursor += len(text)
             else:
+                # Record offset of the first paragraph in this section.
+                if not current_paragraphs and current_section_start is None:
+                    current_section_start = char_cursor
                 current_paragraphs.append(text)
+                if full_text_parts:
+                    char_cursor += 2
                 full_text_parts.append(text)
+                char_cursor += len(text)
 
         # Don't forget the last section.
         if current_paragraphs:
             section_data.append(
-                (current_heading, current_level, current_paragraphs)
+                (current_heading, current_level, current_paragraphs,
+                 current_section_start if current_section_start is not None else char_cursor)
             )
 
         full_text = "\n\n".join(full_text_parts)
@@ -219,16 +245,11 @@ class DOCXParser(BaseParser):
                 full_text,
             )
 
-        # Build Section objects.
+        # Build Section objects using pre-computed character offsets.
         sections: list[Section] = []
-        search_pos = 0
-        for idx, (heading, level, paragraphs) in enumerate(section_data, start=1):
+        for idx, (heading, level, paragraphs, char_offset) in enumerate(section_data, start=1):
             body = "\n\n".join(paragraphs)
             section_id = f"sec-{idx}"
-            # Anchor each section's position by finding the heading in full_text
-            # rather than approximating with arithmetic (fixes offset drift).
-            heading_pos = full_text.find(heading, search_pos)
-            char_offset = heading_pos if heading_pos >= 0 else search_pos
             section = self._build_section(
                 section_id=section_id,
                 title=heading,
@@ -237,7 +258,6 @@ class DOCXParser(BaseParser):
                 start_char=char_offset,
             )
             sections.append(section)
-            search_pos = char_offset + len(heading) + len(body)
 
         return sections, full_text
 
