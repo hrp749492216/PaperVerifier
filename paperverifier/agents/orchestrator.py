@@ -29,6 +29,7 @@ from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import get_prompts
 
 from paperverifier.audit import log_verification_start, log_verification_complete
+from paperverifier.config import bind_request_id
 from paperverifier.agents.base import BaseAgent
 from paperverifier.agents.claim_verification import ClaimVerificationAgent
 from paperverifier.agents.hallucination_detection import HallucinationDetectionAgent
@@ -118,6 +119,9 @@ class AgentOrchestrator:
             Optional dict with keys ``api_results`` (for reference
             verification) and ``related_works`` (for novelty assessment).
         """
+        # Bind a correlation ID for all log entries in this verification run.
+        request_id = bind_request_id()
+
         pipeline_start = time.monotonic()
         external_data = external_data or {}
 

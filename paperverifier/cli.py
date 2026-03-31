@@ -139,6 +139,9 @@ async def _verify(
     settings = get_settings()
     setup_logging(level="DEBUG" if verbose else settings.log_level, fmt="console")
 
+    from paperverifier.config import bind_request_id
+    request_id = bind_request_id()
+
     assignments = load_role_assignments()
     client = UnifiedLLMClient()
 
@@ -176,7 +179,7 @@ async def _verify(
             error_console.print(f"[red]Error:[/] File not found: {input_path}")
             sys.exit(1)
         except Exception as exc:
-            error_console.print(f"[red]Error parsing document:[/] {exc}")
+            error_console.print(f"[red]Error parsing document:[/] {exc}  [dim](request_id={request_id})[/dim]")
             if verbose:
                 console.print_exception()
             sys.exit(1)
@@ -252,7 +255,7 @@ async def _verify(
         try:
             report = await orchestrator.verify(document, external_data=external_data)
         except Exception as exc:
-            error_console.print(f"[red]Verification failed:[/] {exc}")
+            error_console.print(f"[red]Verification failed:[/] {exc}  [dim](request_id={request_id})[/dim]")
             if verbose:
                 console.print_exception()
             sys.exit(1)
