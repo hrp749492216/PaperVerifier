@@ -1,3 +1,10 @@
+> **STATUS: ALL ISSUES RESOLVED**
+> All findings in this review have been addressed across multiple fix commits.
+> This file is retained for historical reference only.
+> See git log for the specific fix commits.
+
+---
+
 # Codex Review 2
 
 ## Executive Summary
@@ -368,4 +375,3 @@ Breakdown:
 - `ruff check .` failed with 116 findings.
 - `python -m pip_audit -r /tmp/paperverifier-audit-requirements.txt` reported no known vulnerabilities for the project dependency list.
 - `git diff --stat HEAD~3` shows that most of this codebase landed very recently, which increases regression risk and makes the current shallow test coverage more concerning.
-

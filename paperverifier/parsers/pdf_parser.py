@@ -179,6 +179,7 @@ class PDFParser(BaseParser):
             logger.warning("pdfplumber_open_failed", error=str(exc))
             return None, [], {}
 
+        text_parts: list[str] = []
         try:
             metadata: dict[str, Any] = {}
             try:
@@ -201,7 +202,6 @@ class PDFParser(BaseParser):
                     max_pages=max_pages,
                 )
 
-            text_parts: list[str] = []
             for page in pages_to_process:
                 try:
                     page_text = page.extract_text()

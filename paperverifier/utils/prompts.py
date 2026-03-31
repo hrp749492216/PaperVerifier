@@ -660,6 +660,14 @@ _PROMPT_REGISTRY: dict[str, tuple[str, str]] = {
 }
 
 
+def escape_xml_content(text: str) -> str:
+    """Escape XML-special characters in user-supplied document content.
+
+    Prevents prompt injection via closing tags like ``</document_content>``.
+    """
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def get_prompts(role: str) -> tuple[str, str]:
     """Return ``(system_prompt, user_prompt_template)`` for a given agent role.
 

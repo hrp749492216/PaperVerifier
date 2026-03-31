@@ -82,7 +82,8 @@ class MarkdownParser(BaseParser):
         sections = self._parse_headings(text)
 
         # Extract metadata fields.
-        title = metadata.get("title") or (
+        raw_title = metadata.get("title")
+        title = raw_title if isinstance(raw_title, str) else (
             sections[0].title if sections else None
         )
         authors_raw = metadata.get("author") or metadata.get("authors", "")
@@ -93,7 +94,8 @@ class MarkdownParser(BaseParser):
         else:
             authors = []
 
-        abstract = metadata.get("abstract") or self._extract_abstract(text)
+        raw_abstract = metadata.get("abstract")
+        abstract = raw_abstract if isinstance(raw_abstract, str) else self._extract_abstract(text)
 
         references = self._extract_references_regex(text)
         fig_table_refs = self._detect_figure_table_refs(text)

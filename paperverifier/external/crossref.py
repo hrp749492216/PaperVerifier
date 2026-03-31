@@ -99,7 +99,7 @@ class CrossRefClient:
         Returns the parsed JSON response on success, or ``None`` on any
         failure (network, HTTP error, circuit open).
         """
-        if not self._circuit_breaker.can_execute():
+        if not await self._circuit_breaker.can_execute():
             logger.warning("crossref_circuit_open", endpoint=endpoint)
             return None
 
@@ -115,13 +115,13 @@ class CrossRefClient:
                 async with session.get(url, params=params) as resp:
                     if resp.status == 429:
                         logger.warning("crossref_rate_limited", endpoint=endpoint)
-                        self._circuit_breaker.record_failure()
+                        await self._circuit_breaker.record_failure()
                         return None
                     if resp.status == 404:
                         logger.debug("crossref_not_found", endpoint=endpoint)
                         # A 404 is a valid response (DOI does not exist),
                         # not a service failure.
-                        self._circuit_breaker.record_success()
+                        await self._circuit_breaker.record_success()
                         return None
                     if resp.status >= 400:
                         body = await resp.text()
@@ -131,14 +131,14 @@ class CrossRefClient:
                             status=resp.status,
                             body=body[:200],
                         )
-                        self._circuit_breaker.record_failure()
+                        await self._circuit_breaker.record_failure()
                         return None
                     data: dict[str, Any] = await resp.json(content_type=None)
-                    self._circuit_breaker.record_success()
+                    await self._circuit_breaker.record_success()
                     return data
             except asyncio.TimeoutError:
                 logger.warning("crossref_timeout", endpoint=endpoint)
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
             except aiohttp.ClientError as exc:
                 logger.warning(
@@ -146,11 +146,11 @@ class CrossRefClient:
                     endpoint=endpoint,
                     error=str(exc),
                 )
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
             except Exception:  # noqa: BLE001
                 logger.exception("crossref_unexpected_error", endpoint=endpoint)
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
 
     # -- Public API --------------------------------------------------------
@@ -215,18 +215,26 @@ class CrossRefClient:
         if data is None:
             return False
         message: dict[str, Any] = data.get("message", {})
+        return self.is_retracted(message)
 
+    @staticmethod
+    def is_retracted(work_message: dict[str, Any]) -> bool:
+        """Check retraction status from an already-fetched Crossref work message.
+
+        This avoids a second HTTP request when the work data was already
+        fetched by :meth:`verify_doi`.
+        """
         # Check the ``update-to`` list for retraction entries.
-        updates: list[dict[str, Any]] = message.get("update-to", [])
+        updates: list[dict[str, Any]] = work_message.get("update-to", [])
         for update in updates:
             if update.get("type", "").lower() == "retraction":
-                logger.info("crossref_retraction_found", doi=doi)
+                logger.info("crossref_retraction_found")
                 return True
 
         # Also check the ``relation.is-retracted-by`` field.
-        relation: dict[str, Any] = message.get("relation", {})
+        relation: dict[str, Any] = work_message.get("relation", {})
         if relation.get("is-retracted-by"):
-            logger.info("crossref_retraction_found_via_relation", doi=doi)
+            logger.info("crossref_retraction_found_via_relation")
             return True
 
         return False

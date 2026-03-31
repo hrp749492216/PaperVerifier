@@ -27,6 +27,11 @@ st.set_page_config(
 # Authentication gate (must come before any other content)
 # ---------------------------------------------------------------------------
 
+from paperverifier.config import get_settings, setup_logging  # noqa: E402
+
+_settings = get_settings()
+setup_logging(level=_settings.log_level, fmt=_settings.log_format)
+
 from streamlit_app.auth import require_auth  # noqa: E402
 
 require_auth()

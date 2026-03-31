@@ -35,7 +35,7 @@ from paperverifier.utils.chunking import (
     create_document_summary,
 )
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
-from paperverifier.utils.prompts import get_prompts
+from paperverifier.utils.prompts import escape_xml_content, get_prompts
 
 logger = structlog.get_logger(__name__)
 
@@ -371,8 +371,9 @@ class BaseAgent:
                 f"{chunk.text}"
             )
 
-        # Escape curly braces in document text before str.format() to avoid
-        # crashes on LaTeX (\begin{equation}), code, or JSON content (CRIT-1).
-        safe_text = document_text.replace("{", "{{").replace("}", "}}")
-        safe_summary = summary.replace("{", "{{").replace("}", "}}")
+        # Escape XML-special characters to prevent prompt injection via
+        # closing tags (e.g. </document_content>), then escape curly braces
+        # to avoid crashes on LaTeX/code/JSON content (CRIT-1).
+        safe_text = escape_xml_content(document_text).replace("{", "{{").replace("}", "}}")
+        safe_summary = escape_xml_content(summary).replace("{", "{{").replace("}", "}}")
         return template.format(document_text=safe_text, summary=safe_summary)

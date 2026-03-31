@@ -39,13 +39,19 @@ def require_auth() -> None:
     expected_password = os.environ.get("PV_APP_PASSWORD", "").strip()
 
     if not expected_password:
-        # No password configured — warn but allow access for local dev.
-        st.sidebar.warning(
-            "No authentication configured. Set the `PV_APP_PASSWORD` "
-            "environment variable to enable login.",
-            icon="\u26a0\ufe0f",
+        # Fail closed unless explicitly running in insecure local dev mode.
+        if os.environ.get("PV_ALLOW_INSECURE_LOCAL") == "1":
+            st.sidebar.warning(
+                "Running in insecure local mode (no authentication). "
+                "Set `PV_APP_PASSWORD` to enable login.",
+                icon="\u26a0\ufe0f",
+            )
+            return
+        st.error(
+            "`PV_APP_PASSWORD` must be set. For local development, "
+            "set `PV_ALLOW_INSECURE_LOCAL=1` to bypass authentication."
         )
-        return
+        st.stop()
 
     # Already authenticated this session.
     if st.session_state.get("_pv_authenticated"):

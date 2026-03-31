@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from streamlit_app.auth import require_auth
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
+require_auth()
 
 # ---------------------------------------------------------------------------
 # Page header
@@ -114,7 +116,11 @@ try:
         st.success("No conflicts detected among selected items.")
 
 except Exception as exc:
-    st.error(f"Error during conflict detection: {exc}")
+    import logging
+    import uuid as _uuid_mod
+    _err_id = _uuid_mod.uuid4().hex[:8]
+    logging.getLogger(__name__).error("conflict_detection_failed error_id=%s", _err_id, exc_info=True)
+    st.error(f"Error during conflict detection. Error ID: {_err_id}")
 
 # ---------------------------------------------------------------------------
 # Apply changes
@@ -179,8 +185,8 @@ if st.button("Apply Changes", type="primary", key="btn_apply"):
                 traceback.format_exc(),
             )
             st.error(
-                f"Failed to apply feedback: {exc}\n\n"
-                f"If this persists, contact support with error ID: `{error_id}`"
+                f"Failed to apply feedback. Error ID: {error_id}\n\n"
+                "If this persists, contact support with the error ID above."
             )
             status.update(label="Application failed", state="error")
 

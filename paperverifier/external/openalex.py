@@ -97,7 +97,7 @@ class OpenAlexClient:
         Returns the parsed JSON response on success, or ``None`` on any
         failure (network, HTTP error, circuit open).
         """
-        if not self._circuit_breaker.can_execute():
+        if not await self._circuit_breaker.can_execute():
             logger.warning("openalex_circuit_open", endpoint=endpoint)
             return None
 
@@ -108,7 +108,7 @@ class OpenAlexClient:
                 async with session.get(url, params=params) as resp:
                     if resp.status == 429:
                         logger.warning("openalex_rate_limited", endpoint=endpoint)
-                        self._circuit_breaker.record_failure()
+                        await self._circuit_breaker.record_failure()
                         return None
                     if resp.status >= 400:
                         body = await resp.text()
@@ -118,14 +118,14 @@ class OpenAlexClient:
                             status=resp.status,
                             body=body[:200],
                         )
-                        self._circuit_breaker.record_failure()
+                        await self._circuit_breaker.record_failure()
                         return None
                     data: dict[str, Any] = await resp.json(content_type=None)
-                    self._circuit_breaker.record_success()
+                    await self._circuit_breaker.record_success()
                     return data
             except asyncio.TimeoutError:
                 logger.warning("openalex_timeout", endpoint=endpoint)
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
             except aiohttp.ClientError as exc:
                 logger.warning(
@@ -133,11 +133,11 @@ class OpenAlexClient:
                     endpoint=endpoint,
                     error=str(exc),
                 )
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
             except Exception:  # noqa: BLE001
                 logger.exception("openalex_unexpected_error", endpoint=endpoint)
-                self._circuit_breaker.record_failure()
+                await self._circuit_breaker.record_failure()
                 return None
 
     # -- Public API --------------------------------------------------------

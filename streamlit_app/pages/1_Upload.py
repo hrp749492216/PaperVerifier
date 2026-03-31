@@ -14,7 +14,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from streamlit_app.auth import require_auth
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
+
+require_auth()
 
 logger = logging.getLogger(__name__)
 
@@ -92,9 +95,23 @@ with tab_upload:
                 try:
                     from paperverifier.parsers.router import InputRouter
 
+                    from paperverifier.security.input_validator import (
+                        validate_uploaded_file,
+                        InputValidationError,
+                    )
+                    from paperverifier.config import get_settings
+
                     st.write("Reading file content...")
                     file_bytes = uploaded_file.read()
                     file_name = uploaded_file.name
+
+                    # Server-side validation: size, extension, magic bytes
+                    st.write("Validating file...")
+                    file_name, file_bytes = validate_uploaded_file(
+                        file_name,
+                        file_bytes,
+                        max_size=get_settings().max_document_size_mb * 1024 * 1024,
+                    )
 
                     # Write to a temp file so the router can detect by extension
                     suffix = Path(file_name).suffix
@@ -324,15 +341,17 @@ if doc is not None:
             # block the Streamlit server.
             # Use a mutable dict for progress state since module-scope
             # variables cannot be accessed via `nonlocal` (Codex-1 fix #1).
+            progress_lock = threading.Lock()
             progress_state: dict[str, object] = {"count": 0, "statuses": {}}
 
             progress_bar = st.progress(0, text="Initializing agents...")
 
             async def progress_callback(role_name: str, status: str) -> None:
-                statuses = progress_state["statuses"]
-                statuses[role_name] = status  # type: ignore[union-attr]
-                if status in ("completed", "failed", "disabled"):
-                    progress_state["count"] = int(progress_state["count"]) + 1  # type: ignore[arg-type]
+                with progress_lock:
+                    statuses = progress_state["statuses"]
+                    statuses[role_name] = status  # type: ignore[union-attr]
+                    if status in ("completed", "failed", "disabled"):
+                        progress_state["count"] = int(progress_state["count"]) + 1  # type: ignore[arg-type]
 
             orchestrator = AgentOrchestrator(
                 client=client,
@@ -351,10 +370,8 @@ if doc is not None:
                 on Python 3.10+ (Codex-1 fix #4).
                 """
                 import asyncio as _asyncio
-                import nest_asyncio as _nest_asyncio
 
                 loop = _asyncio.new_event_loop()
-                _nest_asyncio.apply(loop)
                 try:
                     # Enrich document with external API evidence
                     # before running verification (Codex-1 fix #3).

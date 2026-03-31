@@ -94,7 +94,7 @@ class DiffGenerator:
         )
 
         # Wrap in styled container for consistent rendering.
-        html = (
+        styled_output = (
             "<style>\n"
             "  .diff-container { font-family: monospace; font-size: 13px; }\n"
             "  .diff-container table { border-collapse: collapse; width: 100%; }\n"
@@ -110,7 +110,7 @@ class DiffGenerator:
             f"{table}\n"
             "</div>\n"
         )
-        return html
+        return styled_output
 
     @staticmethod
     def side_by_side(

@@ -123,9 +123,9 @@ async def _lookup_reference(
         if cr_data:
             result = _parse_crossref(cr_data, ref)
             result["source"] = "crossref"
-            # Check retraction
-            retracted = await crossref.check_retraction(ref.doi)
-            result["retracted"] = retracted
+            # Extract retraction status from the already-fetched data
+            # instead of making a second HTTP request.
+            result["retracted"] = CrossRefClient.is_retracted(cr_data)
             return result
 
     # Strategy 2: Title search via Semantic Scholar

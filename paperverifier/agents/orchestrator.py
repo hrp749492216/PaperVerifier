@@ -89,6 +89,7 @@ class AgentOrchestrator:
         # Circuit breaker state -- reset on each verify() call (HIGH-I2).
         self._failure_counts: dict[str, int] = defaultdict(int)
         self._disabled_agents: set[str] = set()
+        self._cb_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -123,6 +124,25 @@ class AgentOrchestrator:
         # Reset circuit breaker state from prior verify() calls (HIGH-I2).
         self._failure_counts.clear()
         self._disabled_agents.clear()
+
+        # Wrap the entire pipeline in a global timeout to prevent
+        # unbounded execution (R4/17 from enterprise review).
+        from paperverifier.config import get_settings
+        pipeline_timeout = getattr(get_settings(), "pipeline_timeout", None)
+        if pipeline_timeout:
+            return await asyncio.wait_for(
+                self._verify_inner(document, external_data, pipeline_start),
+                timeout=pipeline_timeout,
+            )
+        return await self._verify_inner(document, external_data, pipeline_start)
+
+    async def _verify_inner(
+        self,
+        document: ParsedDocument,
+        external_data: dict[str, Any],
+        pipeline_start: float,
+    ) -> VerificationReport:
+        """Inner implementation of verify(), separated for timeout wrapping."""
 
         self._logger.info(
             "verification_started",
@@ -238,7 +258,7 @@ class AgentOrchestrator:
                     agent=agent.role.value,
                     error=str(result),
                 )
-                self._record_failure(agent.role.value)
+                await self._record_failure(agent.role.value)
                 agent_reports.append(
                     AgentReport(
                         agent_role=agent.role.value,
@@ -250,7 +270,7 @@ class AgentOrchestrator:
                 )
             elif isinstance(result, AgentReport):
                 if result.status == "failed":
-                    self._record_failure(agent.role.value)
+                    await self._record_failure(agent.role.value)
                 agent_reports.append(result)
             else:
                 # Unexpected result type
@@ -306,16 +326,17 @@ class AgentOrchestrator:
     # Circuit breaker
     # ------------------------------------------------------------------
 
-    def _record_failure(self, role_name: str) -> None:
+    async def _record_failure(self, role_name: str) -> None:
         """Record a failure for circuit breaker tracking."""
-        self._failure_counts[role_name] += 1
-        if self._failure_counts[role_name] >= _CIRCUIT_BREAKER_THRESHOLD:
-            self._disabled_agents.add(role_name)
-            self._logger.warning(
-                "agent_circuit_breaker_tripped",
-                agent=role_name,
-                failure_count=self._failure_counts[role_name],
-            )
+        async with self._cb_lock:
+            self._failure_counts[role_name] += 1
+            if self._failure_counts[role_name] >= _CIRCUIT_BREAKER_THRESHOLD:
+                self._disabled_agents.add(role_name)
+                self._logger.warning(
+                    "agent_circuit_breaker_tripped",
+                    agent=role_name,
+                    failure_count=self._failure_counts[role_name],
+                )
 
     # ------------------------------------------------------------------
     # Orchestrator synthesis

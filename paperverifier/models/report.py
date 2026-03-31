@@ -55,9 +55,7 @@ class VerificationReport(BaseModel):
     document_hash: str = ""
     created_at: datetime = Field(default_factory=_utcnow)
     agent_reports: list[AgentReport] = Field(default_factory=list)
-    consolidated_findings: list[Finding] | None = Field(
-        default=None, exclude=True,
-    )
+    consolidated_findings: list[Finding] | None = Field(default=None)
     feedback_items: list[FeedbackItem] = Field(default_factory=list)
     overall_score: float | None = None
     summary: str = ""
@@ -148,11 +146,13 @@ class VerificationReport(BaseModel):
             if sid is not None:
                 segment_groups[sid].append(item.number)
 
+        item_by_number = {item.number: item for item in items}
         for group_numbers in segment_groups.values():
             if len(group_numbers) > 1:
                 for num in group_numbers:
-                    item = items[num - 1]  # numbers are 1-based
-                    item.conflicts_with = [n for n in group_numbers if n != num]
+                    item = item_by_number.get(num)
+                    if item is not None:
+                        item.conflicts_with = [n for n in group_numbers if n != num]
 
         self.feedback_items = items
 

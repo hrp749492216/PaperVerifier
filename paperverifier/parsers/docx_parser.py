@@ -221,10 +221,14 @@ class DOCXParser(BaseParser):
 
         # Build Section objects.
         sections: list[Section] = []
-        char_offset = 0
+        search_pos = 0
         for idx, (heading, level, paragraphs) in enumerate(section_data, start=1):
             body = "\n\n".join(paragraphs)
             section_id = f"sec-{idx}"
+            # Anchor each section's position by finding the heading in full_text
+            # rather than approximating with arithmetic (fixes offset drift).
+            heading_pos = full_text.find(heading, search_pos)
+            char_offset = heading_pos if heading_pos >= 0 else search_pos
             section = self._build_section(
                 section_id=section_id,
                 title=heading,
@@ -233,7 +237,7 @@ class DOCXParser(BaseParser):
                 start_char=char_offset,
             )
             sections.append(section)
-            char_offset += len(heading) + len(body) + 4
+            search_pos = char_offset + len(heading) + len(body)
 
         return sections, full_text
 

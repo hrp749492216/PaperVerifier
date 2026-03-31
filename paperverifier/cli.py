@@ -26,10 +26,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
 
-import nest_asyncio
-
-nest_asyncio.apply()  # For environments with existing event loops
-
 console = Console()
 error_console = Console(stderr=True)
 

@@ -1,0 +1,12 @@
+# Development overrides — automatically merged by `docker compose up`.
+# Remove or rename this file in production deployments.
+services:
+  paperverifier:
+    volumes:
+      - ./paperverifier:/app/paperverifier
+      - ./streamlit_app:/app/streamlit_app
+      - ./config:/app/config
+    environment:
+      - PAPERVERIFIER_LOG_FORMAT=console
+      - PAPERVERIFIER_LOG_LEVEL=DEBUG
+      - PV_ALLOW_INSECURE_LOCAL=1

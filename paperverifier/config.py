@@ -83,6 +83,12 @@ class AppSettings(BaseSettings):
         le=300,
         description="Timeout for cloning GitHub repositories.",
     )
+    pipeline_timeout: float = Field(
+        default=1800.0,
+        ge=60,
+        le=7200,
+        description="Global timeout for the entire verification pipeline in seconds.",
+    )
 
     # -- Document limits ----------------------------------------------------
     max_document_size_mb: int = Field(

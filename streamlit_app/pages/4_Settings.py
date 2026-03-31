@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from streamlit_app.auth import require_auth
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
+require_auth()
 
 # ---------------------------------------------------------------------------
 # Imports
@@ -103,8 +105,10 @@ for provider in LLMProvider:
                         st.session_state[_clear_flag] = True
                         st.toast(f"API key for {spec.display_name} saved to keyring.", icon="\u2705")
                         st.rerun()
-                    except Exception as exc:
-                        st.error(f"Failed to save key: {exc}")
+                    except Exception:
+                        import logging as _logging
+                        _logging.getLogger(__name__).error("save_key_failed", exc_info=True)
+                        st.error("Failed to save key. Check logs for details.")
                 else:
                     st.warning("Please enter an API key before saving.")
 
@@ -140,8 +144,10 @@ for provider in LLMProvider:
                                     f"Connection to {spec.display_name} failed. "
                                     "Check your API key."
                                 )
-                        except Exception as exc:
-                            st.error(f"Connection test error: {exc}")
+                        except Exception:
+                            import logging as _logging
+                            _logging.getLogger(__name__).error("connection_test_failed", exc_info=True)
+                            st.error("Connection test failed. Check logs for details.")
 
         # Status indicator
         if is_configured:
@@ -272,8 +278,10 @@ with save_col:
             save_role_assignments(modified_assignments)
             st.session_state["role_assignments"] = modified_assignments
             st.success("Role assignments saved to configuration file.")
-        except Exception as exc:
-            st.error(f"Failed to save configuration: {exc}")
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).error("save_config_failed", exc_info=True)
+            st.error("Failed to save configuration. Check logs for details.")
 
 with reset_col:
     if st.button("Reset to Defaults", key="btn_reset_defaults"):
@@ -282,8 +290,10 @@ with reset_col:
             st.session_state["role_assignments"] = dict(DEFAULT_ASSIGNMENTS)
             st.success("Role assignments reset to defaults.")
             st.rerun()
-        except Exception as exc:
-            st.error(f"Failed to reset configuration: {exc}")
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).error("reset_config_failed", exc_info=True)
+            st.error("Failed to reset configuration. Check logs for details.")
 
 # ---------------------------------------------------------------------------
 # Current configuration summary
