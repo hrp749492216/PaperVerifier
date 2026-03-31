@@ -83,7 +83,7 @@ class MarkdownParser(BaseParser):
 
         # Extract metadata fields.
         raw_title = metadata.get("title")
-        title = raw_title if isinstance(raw_title, str) else (
+        title = raw_title if isinstance(raw_title, str) and raw_title.strip() else (
             sections[0].title if sections else None
         )
         authors_raw = metadata.get("author") or metadata.get("authors", "")

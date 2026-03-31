@@ -2,8 +2,9 @@
 
 Prevents unauthenticated access to expensive LLM endpoints.  The password
 is read from the ``PV_APP_PASSWORD`` environment variable.  When the
-variable is unset the app starts in *open mode* with a warning banner so
-development / local usage is not blocked.
+variable is unset the app **fails closed** -- access is denied unless the
+``PV_ALLOW_INSECURE_LOCAL`` environment variable is explicitly set to
+``"1"``, which enables insecure local development mode with a warning banner.
 
 Includes brute-force protection via :class:`_LoginThrottler` which locks
 out a session after repeated failed login attempts.
@@ -112,7 +113,9 @@ def require_auth() -> None:
     """Block the Streamlit app behind a password prompt.
 
     Reads the expected password from ``PV_APP_PASSWORD``.  If the env var
-    is not set, logs a warning and allows access (dev/local mode).
+    is not set, access is denied (fail-closed) unless
+    ``PV_ALLOW_INSECURE_LOCAL=1`` is set, which enables an insecure local
+    development mode with a sidebar warning.
 
     The password is stored as a SHA-256 hash in session state after first
     successful login so the raw value is not kept in memory.

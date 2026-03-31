@@ -121,6 +121,7 @@ except Exception as exc:
     _err_id = _uuid_mod.uuid4().hex[:8]
     logging.getLogger(__name__).error("conflict_detection_failed error_id=%s", _err_id, exc_info=True)
     st.error(f"Error during conflict detection. Error ID: {_err_id}")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Apply changes
