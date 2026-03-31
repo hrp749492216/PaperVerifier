@@ -18,15 +18,16 @@ RUN groupadd --gid 1000 appuser \
 
 WORKDIR /app
 
-# Install Python dependencies first (for better layer caching).
-# Copy only pyproject.toml so dependency installs are cached separately
-# from source changes.
+# Copy pyproject.toml and README.md first so pip can resolve dependency
+# metadata early, improving Docker layer caching for dependency downloads.
 COPY pyproject.toml README.md ./
+
+# Copy full project source BEFORE pip install so hatchling can find the
+# source tree during the editable/wheel build.
+COPY . .
+
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir ".[ui]"
-
-# Copy project source (changes here don't invalidate the dep layer)
-COPY . .
 
 # Create temp directories and set permissions
 RUN mkdir -p /app/temp_uploads /app/logs \
