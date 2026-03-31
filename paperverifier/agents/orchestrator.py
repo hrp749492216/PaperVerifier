@@ -29,13 +29,12 @@ from paperverifier.agents.results_consistency import ResultsConsistencyAgent
 from paperverifier.agents.section_structure import SectionStructureAgent
 from paperverifier.audit import log_verification_complete, log_verification_start
 from paperverifier.config import bind_request_id
-from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
+from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.models.report import AgentReport, VerificationReport
 from paperverifier.utils.chunking import create_document_summary
-from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import escape_xml_content, get_prompts
 
 logger = structlog.get_logger(__name__)

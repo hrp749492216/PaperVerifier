@@ -5,11 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # Install system dependencies (tini for PID 1, pandoc pinned to >=3.1.6 for CVE-2023-38745)
-ARG TARGETARCH=amd64
 ARG PANDOC_VERSION=3.6.4
 # SHA-256 checksums from https://github.com/jgm/pandoc/releases/tag/3.6.4
 ARG PANDOC_SHA256_amd64=68e5516a5464b12354146e9e23bc41a4c05f302f4ba5def9bdc49f1e2db0d1e0
 ARG PANDOC_SHA256_arm64=33c8e3456a2bd2a0b58b88583ba7f0f126c6b7a4cfc1c04206cd538e4bbd4b04
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \

@@ -185,7 +185,7 @@ class PDFParser(BaseParser):
                         if val:
                             metadata[key.lower()] = val
                 except Exception:
-                    pass
+                    logger.debug("pdf_metadata_extraction_failed", exc_info=True)
 
                 # Enforce page limit (MED-S4).
                 from paperverifier.config import get_settings

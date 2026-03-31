@@ -1,15 +1,21 @@
 # Enterprise Code Review Report
 
+> **Archived:** This is a historical pre-fix report. All findings were resolved in PR #2.
+
 ## 1. Executive Summary
+
 The PaperVerifier codebase is well-structured and implements excellent security primitives including SSRF DNS pinning, magic-byte checks, and process group sandboxing for git cloning. The single biggest risk identified is prompt injection in the Orchestrator agent, where untrusted user input is concatenated directly into the prompt template without isolation boundaries. The top 3 actions are: (1) Add prompt injection boundary markers to the orchestrator prompt, (2) Fix sequential chunk processing in BaseAgent to process chunks in parallel, and (3) Resolve type safety issues in the client models. The overall enterprise readiness score is 86/100.
 
 ## 2. Critical — Must Fix Before Production
+
 None detected.
 
 ## 3. High — Fix Within 1 Sprint
+
 None detected. (Prompt injection was flagged as MEDIUM as it's isolated to the final report).
 
 ## 4. Medium — Fix Within 1 Quarter
+
 - **Prompt Injection (F001)**
   - File: `paperverifier/agents/orchestrator.py:283`
   - Issue: Untrusted text concatenated directly into format string.
@@ -39,11 +45,12 @@ None detected. (Prompt injection was flagged as MEDIUM as it's isolated to the f
   - Confidence: VERIFIED
 
 ## 5. Low — Tech Debt Backlog
+
 - **Hardcoded Secret (F002)**
   - File: `paperverifier/external/semantic_scholar.py:9`
   - Issue: Dummy api_key in source code.
   - Fix: Remove hardcoded default.
-  
+
 - **God Function (F004)**
   - File: `paperverifier/cli.py:94`
   - Issue: The _verify function is too long and handles parsing, orchestration, and output formatting.
@@ -54,6 +61,7 @@ None detected. (Prompt injection was flagged as MEDIUM as it's isolated to the f
   - Issue: Returns object type instead of specific client type.
 
 ## 6. Enterprise Readiness Score
+
 | Category | Score | Weight | Weighted Score |
 |----------|-------|--------|----------------|
 | Security | 23/25 | 30% | 27.6 |

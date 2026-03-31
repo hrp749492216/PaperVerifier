@@ -476,8 +476,12 @@ class LaTeXParser(BaseParser):
                     minimum="3.1.6",
                 )
                 return None
-        except Exception:
-            logger.warning("pandoc_version_check_failed — failing closed")
+        except Exception as exc:
+            logger.warning(
+                "pandoc_version_check_failed",
+                error=str(exc),
+                reason="failing_closed",
+            )
             return None
 
         try:

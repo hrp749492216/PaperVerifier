@@ -12,3 +12,4 @@ services:
       # WARNING: Set to 1 ONLY for local development. In production,
       # remove or rename this entire file to avoid disabling authentication.
       - PV_ALLOW_INSECURE_LOCAL=0
+      - PV_ENVIRONMENT=local

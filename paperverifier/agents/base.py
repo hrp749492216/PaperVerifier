@@ -29,6 +29,17 @@ from paperverifier.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding, FindingCategory, Severity
+
+# Process-wide semaphore shared across all agent runs so the configured
+# max_concurrent_llm_calls ceiling is honoured globally, not per-analysis.
+_llm_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_llm_semaphore() -> asyncio.Semaphore:
+    global _llm_semaphore  # noqa: PLW0603
+    if _llm_semaphore is None:
+        _llm_semaphore = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
+    return _llm_semaphore
 from paperverifier.models.report import AgentReport
 from paperverifier.utils.chunking import (
     DocumentChunk,
@@ -318,7 +329,7 @@ class BaseAgent:
         summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
-        sem = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
+        sem = _get_llm_semaphore()
 
         async def _process_chunk(chunk: DocumentChunk) -> list[Finding]:
             async with sem:
@@ -340,12 +351,14 @@ class BaseAgent:
         all_findings: list[Finding] = []
         for i, result in enumerate(chunk_results):
             if isinstance(result, BaseException):
-                logger.warning(
-                    "chunk_processing_failed",
-                    chunk_index=i,
-                    error=str(result),
-                )
-                continue
+                if isinstance(result, (LLMRateLimitError, LLMTimeoutError, OSError)):
+                    logger.warning(
+                        "chunk_processing_failed",
+                        chunk_index=i,
+                        error=str(result),
+                    )
+                    continue
+                raise result
             all_findings.extend(result)
 
         return all_findings
