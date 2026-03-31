@@ -477,7 +477,8 @@ class LaTeXParser(BaseParser):
                 )
                 return None
         except Exception:
-            logger.debug("pandoc_version_check_failed")
+            logger.warning("pandoc_version_check_failed — failing closed")
+            return None
 
         try:
             plain = pypandoc.convert_text(text, "plain", format="latex")

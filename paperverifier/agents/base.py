@@ -23,6 +23,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from paperverifier.config import get_settings
 from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
 from paperverifier.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from paperverifier.llm.roles import AgentRole, RoleAssignment
@@ -317,24 +318,35 @@ class BaseAgent:
         summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
+        sem = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
+
         async def _process_chunk(chunk: DocumentChunk) -> list[Finding]:
-            user_msg = self._format_user_prompt(
-                user_template, document, chunk, summary, **kwargs,
-            )
-            messages = [
-                Message(role="system", content=system_prompt),
-                Message(role="user", content=user_msg),
-            ]
-            response = await self._call_llm(messages)
-            return self._parse_findings(response)
+            async with sem:
+                user_msg = self._format_user_prompt(
+                    user_template, document, chunk, summary, **kwargs,
+                )
+                messages = [
+                    Message(role="system", content=system_prompt),
+                    Message(role="user", content=user_msg),
+                ]
+                response = await self._call_llm(messages)
+                return self._parse_findings(response)
 
         chunk_results = await asyncio.gather(
             *(_process_chunk(c) for c in chunks),
+            return_exceptions=True,
         )
 
         all_findings: list[Finding] = []
-        for findings in chunk_results:
-            all_findings.extend(findings)
+        for i, result in enumerate(chunk_results):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "chunk_processing_failed",
+                    chunk_index=i,
+                    error=str(result),
+                )
+                continue
+            all_findings.extend(result)
 
         return all_findings
 
