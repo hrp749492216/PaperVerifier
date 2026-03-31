@@ -15,16 +15,13 @@ from typing import Any
 import structlog
 
 from paperverifier.models.document import (
-    FigureTableRef,
     ParsedDocument,
-    Reference,
     Section,
 )
 from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
     validate_file_path,
-    validate_uploaded_file,
 )
 
 logger = structlog.get_logger(__name__)
@@ -176,42 +173,46 @@ class PDFParser(BaseParser):
         text_parts: list[str] = []
         metadata: dict[str, Any] = {}
 
+        # Narrow the exception boundary: only catch failures from
+        # pdfplumber.open() itself, not from the entire extraction block.
         try:
-            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                try:
-                    raw_meta = pdf.metadata or {}
-                    for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
-                        val = raw_meta.get(key)
-                        if val:
-                            metadata[key.lower()] = val
-                except Exception:
-                    logger.debug("pdf_metadata_extraction_failed", exc_info=True)
-
-                # Enforce page limit (MED-S4).
-                from paperverifier.config import get_settings
-                max_pages = get_settings().max_document_pages
-                pages_to_process = pdf.pages[:max_pages]
-                if len(pdf.pages) > max_pages:
-                    logger.warning(
-                        "pdf_page_limit",
-                        total_pages=len(pdf.pages),
-                        max_pages=max_pages,
-                    )
-
-                for page in pages_to_process:
-                    try:
-                        page_text = page.extract_text()
-                        if page_text:
-                            text_parts.append(page_text)
-                    except Exception as exc:
-                        logger.warning(
-                            "pdfplumber_page_error",
-                            page=page.page_number,
-                            error=str(exc),
-                        )
+            pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
         except Exception as exc:
-            logger.warning("pdfplumber_open_failed", error=str(exc))
+            logger.warning("pdfplumber_open_failed", error=str(exc), exc_info=True)
             return None, [], {}
+
+        with pdf:
+            try:
+                raw_meta = pdf.metadata or {}
+                for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
+                    val = raw_meta.get(key)
+                    if val:
+                        metadata[key.lower()] = val
+            except Exception:
+                logger.debug("pdf_metadata_extraction_failed", exc_info=True)
+
+            # Enforce page limit (MED-S4).
+            from paperverifier.config import get_settings
+            max_pages = get_settings().max_document_pages
+            pages_to_process = pdf.pages[:max_pages]
+            if len(pdf.pages) > max_pages:
+                logger.warning(
+                    "pdf_page_limit",
+                    total_pages=len(pdf.pages),
+                    max_pages=max_pages,
+                )
+
+            for page in pages_to_process:
+                try:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(page_text)
+                except Exception as exc:
+                    logger.warning(
+                        "pdfplumber_page_error",
+                        page=page.page_number,
+                        error=str(exc),
+                    )
 
         if not text_parts:
             return None, [], metadata

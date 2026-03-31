@@ -15,7 +15,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import structlog
 
@@ -255,7 +256,7 @@ class AgentOrchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         agent_reports: list[AgentReport] = []
-        for (agent, _kwargs), result in zip(agents_with_kwargs, results):
+        for (agent, _kwargs), result in zip(agents_with_kwargs, results, strict=True):
             if isinstance(result, Exception):
                 # Create a failure report for exceptions that escaped
                 self._logger.error(
@@ -314,16 +315,20 @@ class AgentOrchestrator:
             if self._progress_callback:
                 try:
                     await self._progress_callback(agent.role.value, "running")
-                except Exception:  # noqa: BLE001
-                    pass  # Never let callback failures affect the pipeline
+                except Exception:  # noqa: BLE001, S110
+                    self._logger.debug(
+                        "progress_callback_failed", agent=agent.role.value, phase="start",
+                    )
 
             report = await agent.analyze(document, **kwargs)
 
             if self._progress_callback:
                 try:
                     await self._progress_callback(agent.role.value, report.status)
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception:  # noqa: BLE001, S110
+                    self._logger.debug(
+                        "progress_callback_failed", agent=agent.role.value, phase="complete",
+                    )
 
             return report
 
@@ -381,10 +386,12 @@ class AgentOrchestrator:
         document_summary = create_document_summary(document)
         findings_text = self._format_findings_for_synthesis(all_findings)
 
-        # Escape XML-special characters and curly braces, then wrap in
-        # untrusted-content boundaries to mitigate prompt injection (F001).
-        safe_summary = escape_xml_content(document_summary).replace("{", "{{").replace("}", "}}")
-        safe_findings = escape_xml_content(findings_text).replace("{", "{{").replace("}", "}}")
+        # Escape XML-special characters and wrap in untrusted-content
+        # boundaries to mitigate prompt injection (F001).
+        # NOTE: str.format() does NOT interpret braces inside replacement
+        # values, only in the template — no need to double-brace the data.
+        safe_summary = escape_xml_content(document_summary)
+        safe_findings = escape_xml_content(findings_text)
 
         wrapped_summary = (
             "<untrusted_document_summary>\n"

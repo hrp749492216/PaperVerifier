@@ -20,7 +20,6 @@ from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
     validate_file_path,
-    validate_uploaded_file,
 )
 
 logger = structlog.get_logger(__name__)
@@ -195,8 +194,14 @@ class DOCXParser(BaseParser):
                 # Save previous section.
                 if current_paragraphs:
                     section_data.append(
-                        (current_heading, current_level, current_paragraphs,
-                         current_section_start if current_section_start is not None else char_cursor)
+                        (
+                            current_heading,
+                            current_level,
+                            current_paragraphs,
+                            current_section_start
+                            if current_section_start is not None
+                            else char_cursor,
+                        )
                     )
                 current_heading = text
                 current_level = heading_level
@@ -297,8 +302,6 @@ class DOCXParser(BaseParser):
         the underlying XML when possible.
         """
         try:
-            from docx.opc.constants import RELATIONSHIP_TYPE as RT  # type: ignore[import-untyped]
-
             footnotes_part = None
             for rel in doc.part.rels.values():
                 if "footnotes" in rel.reltype:

@@ -126,7 +126,7 @@ cp .env.example .env
 
 ## Configuration
 
-All settings are configurable via environment variables (prefix `PAPERVERIFIER_`) or the interactive CLI:
+Application settings use the `PAPERVERIFIER_` prefix. Provider and external API credentials use vendor-specific names (see the provider table above). Both can also be managed via the interactive CLI:
 
 ```bash
 paperverifier config

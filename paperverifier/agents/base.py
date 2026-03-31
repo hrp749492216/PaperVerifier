@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import weakref
 from typing import Any
 
 import structlog
@@ -29,17 +30,6 @@ from paperverifier.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding, FindingCategory, Severity
-
-# Process-wide semaphore shared across all agent runs so the configured
-# max_concurrent_llm_calls ceiling is honoured globally, not per-analysis.
-_llm_semaphore: asyncio.Semaphore | None = None
-
-
-def _get_llm_semaphore() -> asyncio.Semaphore:
-    global _llm_semaphore  # noqa: PLW0603
-    if _llm_semaphore is None:
-        _llm_semaphore = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
-    return _llm_semaphore
 from paperverifier.models.report import AgentReport
 from paperverifier.utils.chunking import (
     DocumentChunk,
@@ -48,6 +38,24 @@ from paperverifier.utils.chunking import (
 )
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import escape_xml_content, get_prompts
+
+# Process-wide semaphore shared across all agent runs so the configured
+# max_concurrent_llm_calls ceiling is honoured globally, not per-analysis.
+# Keyed by event loop so each loop (e.g. in pytest-asyncio) gets its own
+# semaphore, avoiding "bound to a different event loop" RuntimeError.
+_llm_semaphores: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop,
+    asyncio.Semaphore,
+] = weakref.WeakKeyDictionary()
+
+
+def _get_llm_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    sem = _llm_semaphores.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
+        _llm_semaphores[loop] = sem
+    return sem
 
 logger = structlog.get_logger(__name__)
 
@@ -134,7 +142,7 @@ class BaseAgent:
                     ),
                     timeout=timeout + 5.0,  # outer guard slightly longer
                 )
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise LLMTimeoutError(
                     f"Agent {self.role.value} timed out after {timeout}s.",
                     provider=self._assignment.provider.value,

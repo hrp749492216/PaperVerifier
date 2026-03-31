@@ -10,10 +10,8 @@ Never calls ``pypandoc.download_pandoc()`` in production.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -261,7 +259,13 @@ class LaTeXParser(BaseParser):
     # Input/Include resolution
     # ------------------------------------------------------------------
 
-    def _resolve_inputs(self, text: str, base_dir: Path, depth: int, root_dir: Path | None = None) -> str:
+    def _resolve_inputs(
+        self,
+        text: str,
+        base_dir: Path,
+        depth: int,
+        root_dir: Path | None = None,
+    ) -> str:
         """Recursively resolve ``\\input{}`` and ``\\include{}`` directives.
 
         Prevents infinite recursion with a depth limit of 10.
