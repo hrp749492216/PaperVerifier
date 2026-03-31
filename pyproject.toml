@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "paperverifier"
 version = "0.1.0"
-description = "Enterprise-grade research paper verification tool with multi-LLM provider support"
+description = "Automated research paper verification powered by multi-agent LLM pipelines"
 readme = "README.md"
 license = "LicenseRef-Proprietary"
 requires-python = ">=3.11"

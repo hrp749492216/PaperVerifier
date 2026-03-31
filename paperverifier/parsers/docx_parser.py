@@ -20,7 +20,6 @@ from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
     validate_file_path,
-    validate_uploaded_file,
 )
 
 logger = structlog.get_logger(__name__)
@@ -60,11 +59,11 @@ class DOCXParser(BaseParser):
         """
         try:
             import docx  # type: ignore[import-untyped]
-        except ImportError:
+        except ImportError as exc:
             raise RuntimeError(
                 "python-docx is required for DOCX parsing. "
                 "Install it with: pip install python-docx"
-            )
+            ) from exc
 
         source_path = ""
 
@@ -113,8 +112,12 @@ class DOCXParser(BaseParser):
                 metadata["subject"] = props.subject
             if props.keywords:
                 metadata["keywords"] = props.keywords
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "docx_core_properties_unavailable",
+                error=str(exc),
+                exc_info=True,
+            )
 
         # Walk paragraphs and build section structure.
         sections, full_text = self._extract_sections(doc)
@@ -191,8 +194,14 @@ class DOCXParser(BaseParser):
                 # Save previous section.
                 if current_paragraphs:
                     section_data.append(
-                        (current_heading, current_level, current_paragraphs,
-                         current_section_start if current_section_start is not None else char_cursor)
+                        (
+                            current_heading,
+                            current_level,
+                            current_paragraphs,
+                            current_section_start
+                            if current_section_start is not None
+                            else char_cursor,
+                        )
                     )
                 current_heading = text
                 current_level = heading_level
@@ -293,8 +302,6 @@ class DOCXParser(BaseParser):
         the underlying XML when possible.
         """
         try:
-            from docx.opc.constants import RELATIONSHIP_TYPE as RT  # type: ignore[import-untyped]
-
             footnotes_part = None
             for rel in doc.part.rels.values():
                 if "footnotes" in rel.reltype:

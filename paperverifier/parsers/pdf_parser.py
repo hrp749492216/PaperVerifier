@@ -15,16 +15,13 @@ from typing import Any
 import structlog
 
 from paperverifier.models.document import (
-    FigureTableRef,
     ParsedDocument,
-    Reference,
     Section,
 )
 from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
     validate_file_path,
-    validate_uploaded_file,
 )
 
 logger = structlog.get_logger(__name__)
@@ -104,11 +101,11 @@ class PDFParser(BaseParser):
         if text is None:
             try:
                 import pdfplumber  # noqa: F401,PLC0415
-            except ImportError:
+            except ImportError as exc:
                 raise RuntimeError(
                     "pdfplumber is required for PDF parsing. "
                     "Install with: pip install pdfplumber"
-                )
+                ) from exc
             # pdfplumber is installed but extraction failed.
             raise InputValidationError(
                 "PDF text extraction failed. The file may be corrupted, "
@@ -173,15 +170,18 @@ class PDFParser(BaseParser):
             logger.debug("pdfplumber_not_available")
             return None, [], {}
 
+        text_parts: list[str] = []
+        metadata: dict[str, Any] = {}
+
+        # Narrow the exception boundary: only catch failures from
+        # pdfplumber.open() itself, not from the entire extraction block.
         try:
             pdf = pdfplumber.open(io.BytesIO(pdf_bytes))
         except Exception as exc:
-            logger.warning("pdfplumber_open_failed", error=str(exc))
+            logger.warning("pdfplumber_open_failed", error=str(exc), exc_info=True)
             return None, [], {}
 
-        text_parts: list[str] = []
-        try:
-            metadata: dict[str, Any] = {}
+        with pdf:
             try:
                 raw_meta = pdf.metadata or {}
                 for key in ("Title", "Author", "Subject", "Keywords", "Creator"):
@@ -189,7 +189,7 @@ class PDFParser(BaseParser):
                     if val:
                         metadata[key.lower()] = val
             except Exception:
-                pass
+                logger.debug("pdf_metadata_extraction_failed", exc_info=True)
 
             # Enforce page limit (MED-S4).
             from paperverifier.config import get_settings
@@ -213,8 +213,6 @@ class PDFParser(BaseParser):
                         page=page.page_number,
                         error=str(exc),
                     )
-        finally:
-            pdf.close()
 
         if not text_parts:
             return None, [], metadata

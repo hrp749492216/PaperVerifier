@@ -236,8 +236,7 @@ class UnifiedLLMClient:
                 retry_after=retry_after,
             ) from exc
         except anthropic.BadRequestError as exc:
-            msg_lower = str(exc).lower()
-            if "token" in msg_lower or "context" in msg_lower or "too long" in msg_lower:
+            if _is_context_length_error(exc):
                 raise LLMContextLengthError(
                     str(exc),
                     provider=LLMProvider.ANTHROPIC.value,
@@ -340,8 +339,7 @@ class UnifiedLLMClient:
                 retry_after=retry_after,
             ) from exc
         except openai.BadRequestError as exc:
-            msg_lower = str(exc).lower()
-            if "token" in msg_lower or "context" in msg_lower or "length" in msg_lower:
+            if _is_context_length_error(exc):
                 raise LLMContextLengthError(
                     str(exc),
                     provider=provider.value,
@@ -514,6 +512,45 @@ class UnifiedLLMClient:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_CONTEXT_LENGTH_ERROR_CODES: frozenset[str] = frozenset({
+    "context_length_exceeded",
+    "string_above_max_length",
+})
+
+_CONTEXT_LENGTH_KEYWORDS: tuple[str, ...] = (
+    "maximum context length",
+    "context length exceeded",
+    "too many tokens",
+    "prompt is too long",
+)
+
+
+def _is_context_length_error(exc: Exception) -> bool:
+    """Detect context-length errors using structured codes first, string match as fallback.
+
+    Checks provider-specific structured error codes (OpenAI ``exc.code``,
+    Anthropic ``exc.body.error.type``) before falling back to keyword
+    matching on the exception message.
+    """
+    # OpenAI exposes a `.code` attribute (e.g. "context_length_exceeded").
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code in _CONTEXT_LENGTH_ERROR_CODES:
+        return True
+
+    # Anthropic exposes `.body` as a dict with {"error": {"type": ..., "message": ...}}.
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error_info = body.get("error")
+        if isinstance(error_info, dict):
+            err_type = error_info.get("type", "")
+            if err_type in _CONTEXT_LENGTH_ERROR_CODES:
+                return True
+
+    # Fallback: keyword matching on the stringified exception message.
+    msg_lower = str(exc).lower()
+    return any(kw in msg_lower for kw in _CONTEXT_LENGTH_KEYWORDS)
+
 
 def _parse_retry_after(response: Any) -> float | None:
     """Extract a ``Retry-After`` value from an HTTP response, if present."""

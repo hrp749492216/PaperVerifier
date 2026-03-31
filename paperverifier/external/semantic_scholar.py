@@ -6,7 +6,8 @@ limiting, circuit breaking, and graceful degradation.
 
 Usage::
 
-    client = SemanticScholarClient(api_key="optional-key")
+    import os
+    client = SemanticScholarClient(api_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY", ""))
     papers = await client.search_paper("attention is all you need")
     await client.close()
 """

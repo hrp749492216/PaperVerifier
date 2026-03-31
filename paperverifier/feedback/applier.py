@@ -314,6 +314,7 @@ class FeedbackApplier:
                     "feedback_item_error",
                     item_number=item.number,
                     error=str(exc),
+                    exc_info=True,
                 )
 
         result.modified_text = current_text

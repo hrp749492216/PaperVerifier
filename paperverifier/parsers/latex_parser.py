@@ -10,10 +10,8 @@ Never calls ``pypandoc.download_pandoc()`` in production.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -261,7 +259,13 @@ class LaTeXParser(BaseParser):
     # Input/Include resolution
     # ------------------------------------------------------------------
 
-    def _resolve_inputs(self, text: str, base_dir: Path, depth: int, root_dir: Path | None = None) -> str:
+    def _resolve_inputs(
+        self,
+        text: str,
+        base_dir: Path,
+        depth: int,
+        root_dir: Path | None = None,
+    ) -> str:
         """Recursively resolve ``\\input{}`` and ``\\include{}`` directives.
 
         Prevents infinite recursion with a depth limit of 10.
@@ -463,6 +467,25 @@ class LaTeXParser(BaseParser):
             import pypandoc  # type: ignore[import-untyped]
         except ImportError:
             logger.debug("pypandoc_not_available")
+            return None
+
+        # Guard against Pandoc versions vulnerable to CVE-2023-38745.
+        try:
+            version_str = pypandoc.get_pandoc_version()
+            version_parts = tuple(int(x) for x in version_str.split(".")[:3])
+            if version_parts < (3, 1, 6):
+                logger.warning(
+                    "pandoc_version_too_old",
+                    version=version_str,
+                    minimum="3.1.6",
+                )
+                return None
+        except Exception as exc:
+            logger.warning(
+                "pandoc_version_check_failed",
+                error=str(exc),
+                reason="failing_closed",
+            )
             return None
 
         try:

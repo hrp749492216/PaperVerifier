@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import weakref
 from typing import Any
 
 import structlog
@@ -23,6 +24,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from paperverifier.config import get_settings
 from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
 from paperverifier.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from paperverifier.llm.roles import AgentRole, RoleAssignment
@@ -36,6 +38,24 @@ from paperverifier.utils.chunking import (
 )
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import escape_xml_content, get_prompts
+
+# Process-wide semaphore shared across all agent runs so the configured
+# max_concurrent_llm_calls ceiling is honoured globally, not per-analysis.
+# Keyed by event loop so each loop (e.g. in pytest-asyncio) gets its own
+# semaphore, avoiding "bound to a different event loop" RuntimeError.
+_llm_semaphores: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop,
+    asyncio.Semaphore,
+] = weakref.WeakKeyDictionary()
+
+
+def _get_llm_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    sem = _llm_semaphores.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(get_settings().max_concurrent_llm_calls)
+        _llm_semaphores[loop] = sem
+    return sem
 
 logger = structlog.get_logger(__name__)
 
@@ -122,7 +142,7 @@ class BaseAgent:
                     ),
                     timeout=timeout + 5.0,  # outer guard slightly longer
                 )
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise LLMTimeoutError(
                     f"Agent {self.role.value} timed out after {timeout}s.",
                     provider=self._assignment.provider.value,
@@ -317,18 +337,37 @@ class BaseAgent:
         summary = create_document_summary(document)
         chunks = chunk_document(document, self._assignment.model)
 
+        sem = _get_llm_semaphore()
+
+        async def _process_chunk(chunk: DocumentChunk) -> list[Finding]:
+            async with sem:
+                user_msg = self._format_user_prompt(
+                    user_template, document, chunk, summary, **kwargs,
+                )
+                messages = [
+                    Message(role="system", content=system_prompt),
+                    Message(role="user", content=user_msg),
+                ]
+                response = await self._call_llm(messages)
+                return self._parse_findings(response)
+
+        chunk_results = await asyncio.gather(
+            *(_process_chunk(c) for c in chunks),
+            return_exceptions=True,
+        )
+
         all_findings: list[Finding] = []
-        for chunk in chunks:
-            user_msg = self._format_user_prompt(
-                user_template, document, chunk, summary, **kwargs,
-            )
-            messages = [
-                Message(role="system", content=system_prompt),
-                Message(role="user", content=user_msg),
-            ]
-            response = await self._call_llm(messages)
-            findings = self._parse_findings(response)
-            all_findings.extend(findings)
+        for i, result in enumerate(chunk_results):
+            if isinstance(result, BaseException):
+                if isinstance(result, (LLMRateLimitError, LLMTimeoutError, OSError)):
+                    logger.warning(
+                        "chunk_processing_failed",
+                        chunk_index=i,
+                        error=str(result),
+                    )
+                    continue
+                raise result
+            all_findings.extend(result)
 
         return all_findings
 
