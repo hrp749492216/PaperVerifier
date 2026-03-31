@@ -9,19 +9,18 @@ Usage::
     limiter = AsyncRateLimiter(max_concurrent=3, requests_per_second=5.0)
     breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0, name="openalex")
 
-    if breaker.can_execute():
+    if await breaker.can_execute():
         async with limiter:
             try:
                 result = await do_request()
-                breaker.record_success()
+                await breaker.record_success()
             except Exception:
-                breaker.record_failure()
+                await breaker.record_failure()
 """
 
 from __future__ import annotations
 
 import asyncio
-import threading
 import time
 
 import structlog
@@ -68,19 +67,18 @@ class AsyncRateLimiter:
     async def acquire(self) -> None:
         """Block until both concurrency and rate constraints are met."""
         await self._semaphore.acquire()
-        sleep_time = 0.0
-        async with self._lock:
-            now = time.monotonic()
-            # Discard timestamps outside the 1-second sliding window.
-            self._timestamps = [t for t in self._timestamps if now - t < 1.0]
-            if len(self._timestamps) >= self._rate:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                # Discard timestamps outside the 1-second sliding window.
+                self._timestamps = [t for t in self._timestamps if now - t < 1.0]
+                if len(self._timestamps) < self._rate:
+                    self._timestamps.append(time.monotonic())
+                    return
                 sleep_time = 1.0 - (now - self._timestamps[0])
-                if sleep_time <= 0:
-                    sleep_time = 0.0
-        if sleep_time > 0:
-            await asyncio.sleep(sleep_time)
-        async with self._lock:
-            self._timestamps.append(time.monotonic())
+            # Sleep OUTSIDE the lock so other coroutines aren't blocked.
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
 
     def release(self) -> None:
         """Release the concurrency semaphore."""
@@ -135,11 +133,11 @@ class CircuitBreaker:
         self.recovery_timeout: float = recovery_timeout
         self.last_failure_time: float = 0.0
         self.name: str = name
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
 
     # -- Query -------------------------------------------------------------
 
-    def can_execute(self) -> bool:
+    async def can_execute(self) -> bool:
         """Return ``True`` if a request is allowed in the current state.
 
         * **CLOSED** -- always allowed.
@@ -147,7 +145,7 @@ class CircuitBreaker:
           elapsed, at which point the state transitions to HALF_OPEN.
         * **HALF_OPEN** -- one probe request is allowed.
         """
-        with self._lock:
+        async with self._lock:
             if self.state == self.CLOSED:
                 return True
 
@@ -168,22 +166,22 @@ class CircuitBreaker:
 
     # -- Feedback ----------------------------------------------------------
 
-    def record_success(self) -> None:
+    async def record_success(self) -> None:
         """Record a successful request.  Resets the breaker to CLOSED."""
-        with self._lock:
+        async with self._lock:
             if self.state != self.CLOSED:
                 logger.info("circuit_breaker_closed", name=self.name)
             self.state = self.CLOSED
             self.failure_count = 0
 
-    def record_failure(self) -> None:
+    async def record_failure(self) -> None:
         """Record a failed request.
 
         In CLOSED state the failure counter increments; when it reaches
         :pyattr:`failure_threshold` the breaker trips to OPEN.  In
         HALF_OPEN state, any failure immediately re-opens the breaker.
         """
-        with self._lock:
+        async with self._lock:
             self.failure_count += 1
             self.last_failure_time = time.monotonic()
 

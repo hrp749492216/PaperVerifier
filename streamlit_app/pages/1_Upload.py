@@ -14,7 +14,12 @@ from pathlib import Path
 
 import streamlit as st
 
+from streamlit_app.auth import require_auth
+from streamlit_app.rate_limit import SessionRateLimiter
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
+from paperverifier.config import get_settings
+
+require_auth()
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +27,13 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_UPLOAD_SIZE_MB = 50
+# Use the configurable setting so the UI limit matches validate_uploaded_file.
+_settings = get_settings()
+MAX_UPLOAD_SIZE_MB = _settings.max_document_size_mb
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+# Per-session verification rate limiter (10 requests per hour).
+_verification_limiter = SessionRateLimiter(max_requests=10, window_seconds=3600.0)
 
 
 # ---------------------------------------------------------------------------
@@ -92,9 +102,23 @@ with tab_upload:
                 try:
                     from paperverifier.parsers.router import InputRouter
 
+                    from paperverifier.security.input_validator import (
+                        validate_uploaded_file,
+                        InputValidationError,
+                    )
+                    from paperverifier.config import get_settings
+
                     st.write("Reading file content...")
                     file_bytes = uploaded_file.read()
                     file_name = uploaded_file.name
+
+                    # Server-side validation: size, extension, magic bytes
+                    st.write("Validating file...")
+                    file_name, file_bytes = validate_uploaded_file(
+                        file_name,
+                        file_bytes,
+                        max_size=get_settings().max_document_size_mb * 1024 * 1024,
+                    )
 
                     # Write to a temp file so the router can detect by extension
                     suffix = Path(file_name).suffix
@@ -296,6 +320,18 @@ if doc is not None:
     )
 
     if st.button("Start Verification", type="primary", key="btn_verify"):
+        # Per-session rate-limit guard
+        session_id = st.session_state.get("_pv_session_id", "anonymous")
+        if not _verification_limiter.check(session_id):
+            wait = _verification_limiter.remaining_wait(session_id)
+            minutes = int(wait // 60)
+            st.error(
+                f"Rate limit exceeded. Please wait {minutes} minutes "
+                "before submitting another verification."
+            )
+            st.stop()
+        _verification_limiter.record(session_id)
+
         # Build client and assignments
         try:
             from paperverifier.llm.client import UnifiedLLMClient
@@ -324,15 +360,17 @@ if doc is not None:
             # block the Streamlit server.
             # Use a mutable dict for progress state since module-scope
             # variables cannot be accessed via `nonlocal` (Codex-1 fix #1).
+            progress_lock = threading.Lock()
             progress_state: dict[str, object] = {"count": 0, "statuses": {}}
 
             progress_bar = st.progress(0, text="Initializing agents...")
 
             async def progress_callback(role_name: str, status: str) -> None:
-                statuses = progress_state["statuses"]
-                statuses[role_name] = status  # type: ignore[union-attr]
-                if status in ("completed", "failed", "disabled"):
-                    progress_state["count"] = int(progress_state["count"]) + 1  # type: ignore[arg-type]
+                with progress_lock:
+                    statuses = progress_state["statuses"]
+                    statuses[role_name] = status  # type: ignore[union-attr]
+                    if status in ("completed", "failed", "disabled"):
+                        progress_state["count"] = int(progress_state["count"]) + 1  # type: ignore[arg-type]
 
             orchestrator = AgentOrchestrator(
                 client=client,
@@ -351,10 +389,8 @@ if doc is not None:
                 on Python 3.10+ (Codex-1 fix #4).
                 """
                 import asyncio as _asyncio
-                import nest_asyncio as _nest_asyncio
 
                 loop = _asyncio.new_event_loop()
-                _nest_asyncio.apply(loop)
                 try:
                     # Enrich document with external API evidence
                     # before running verification (Codex-1 fix #3).
@@ -390,11 +426,14 @@ if doc is not None:
                 # HIGH-U2: Poll and update progress bar while worker runs
                 import time
                 while worker.is_alive():
-                    done = int(progress_state["count"])  # type: ignore[arg-type]
+                    # Snapshot shared state under the lock to avoid
+                    # RuntimeError from concurrent dict mutation.
+                    with progress_lock:
+                        done = int(progress_state["count"])  # type: ignore[arg-type]
+                        statuses_snapshot = dict(progress_state["statuses"])  # type: ignore[arg-type]
                     pct = int((done / total_agents) * 100) if total_agents else 0
-                    statuses = progress_state["statuses"]
                     running = [
-                        name for name, s in statuses.items() if s == "running"  # type: ignore[union-attr]
+                        name for name, s in statuses_snapshot.items() if s == "running"
                     ]
                     label = (
                         f"Running: {', '.join(running)}... ({done}/{total_agents} done)"

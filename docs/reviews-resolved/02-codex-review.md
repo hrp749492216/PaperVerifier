@@ -1,3 +1,10 @@
+> **STATUS: ALL ISSUES RESOLVED**
+> All findings in this review have been addressed across multiple fix commits.
+> This file is retained for historical reference only.
+> See git log for the specific fix commits.
+
+---
+
 # Codex Review 1
 
 ## Summary
@@ -76,7 +83,7 @@ Oversized responses can consume memory before rejection in fallback mode, and th
 
 ### 7. Medium: PDF parse failures are misclassified as missing dependency
 
-`_try_pdfplumber()` uses the same `None` sentinel for “library not installed” and “library present but failed to open/extract this file,” and `parse()` converts both into “Install pdfplumber.”
+`_try_pdfplumber()` uses the same `None` sentinel for "library not installed" and "library present but failed to open/extract this file," and `parse()` converts both into "Install pdfplumber."
 
 - Import failure path: [paperverifier/parsers/pdf_parser.py:161](/Users/hariramanpokhrel/Desktop/PaperVerifier/paperverifier/parsers/pdf_parser.py#L161)
 - Open failure path: [paperverifier/parsers/pdf_parser.py:167](/Users/hariramanpokhrel/Desktop/PaperVerifier/paperverifier/parsers/pdf_parser.py#L167)

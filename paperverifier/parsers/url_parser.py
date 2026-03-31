@@ -20,7 +20,7 @@ from paperverifier.models.document import ParsedDocument
 from paperverifier.parsers.base import BaseParser
 from paperverifier.security.input_validator import (
     InputValidationError,
-    validate_url,
+    resolve_and_validate_url,
 )
 
 logger = structlog.get_logger(__name__)
@@ -89,7 +89,7 @@ class URLParser(BaseParser):
         url = self._normalize_arxiv_url(url)
 
         # Validate URL for SSRF protection.
-        validated_url = validate_url(url)
+        validated_url, _ = resolve_and_validate_url(url)
 
         # Download the content.
         content, content_type, final_url = await self._download(validated_url)
@@ -178,7 +178,7 @@ class URLParser(BaseParser):
                             # Resolve relative redirects.
                             location = urllib.parse.urljoin(current_url, location)
                             # Re-validate the redirect target for SSRF.
-                            current_url = validate_url(location)
+                            current_url, _ = resolve_and_validate_url(location)
                             continue
 
                         if response.status != 200:
@@ -260,7 +260,7 @@ class URLParser(BaseParser):
                                 f"Redirect with no Location header from: {current_url}"
                             )
                         location = urllib.parse.urljoin(current_url, location)
-                        current_url = validate_url(location)
+                        current_url, _ = resolve_and_validate_url(location)
                         response = await client.get(current_url)
                         continue
                     break

@@ -19,16 +19,6 @@ from typing import Any, Awaitable, Callable
 
 import structlog
 
-from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
-from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument
-from paperverifier.models.findings import Finding
-from paperverifier.models.report import AgentReport, VerificationReport
-from paperverifier.utils.chunking import create_document_summary
-from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
-from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.audit import log_verification_start, log_verification_complete
 from paperverifier.agents.base import BaseAgent
 from paperverifier.agents.claim_verification import ClaimVerificationAgent
 from paperverifier.agents.hallucination_detection import HallucinationDetectionAgent
@@ -37,6 +27,16 @@ from paperverifier.agents.novelty_assessment import NoveltyAssessmentAgent
 from paperverifier.agents.reference_verification import ReferenceVerificationAgent
 from paperverifier.agents.results_consistency import ResultsConsistencyAgent
 from paperverifier.agents.section_structure import SectionStructureAgent
+from paperverifier.audit import log_verification_complete, log_verification_start
+from paperverifier.config import bind_request_id
+from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
+from paperverifier.llm.roles import AgentRole, RoleAssignment
+from paperverifier.models.document import ParsedDocument
+from paperverifier.models.findings import Finding
+from paperverifier.models.report import AgentReport, VerificationReport
+from paperverifier.utils.chunking import create_document_summary
+from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
+from paperverifier.utils.prompts import get_prompts
 
 logger = structlog.get_logger(__name__)
 
@@ -86,9 +86,11 @@ class AgentOrchestrator:
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._progress_callback = progress_callback
         self._logger = structlog.get_logger().bind(component="orchestrator")
-        # Circuit breaker state -- reset on each verify() call (HIGH-I2).
+        # Circuit breaker state -- persists across verify() calls so that
+        # repeated failures of the same role trip the breaker.
         self._failure_counts: dict[str, int] = defaultdict(int)
         self._disabled_agents: set[str] = set()
+        self._cb_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -117,12 +119,36 @@ class AgentOrchestrator:
             Optional dict with keys ``api_results`` (for reference
             verification) and ``related_works`` (for novelty assessment).
         """
+        # Bind a correlation ID for all log entries in this verification run.
+        bind_request_id()
+
         pipeline_start = time.monotonic()
         external_data = external_data or {}
 
-        # Reset circuit breaker state from prior verify() calls (HIGH-I2).
-        self._failure_counts.clear()
-        self._disabled_agents.clear()
+        # Circuit breaker state persists across verify() calls so that
+        # repeated failures of the same agent role across multiple documents
+        # will eventually trip the breaker.  Previously these were cleared
+        # here (HIGH-I2), making the threshold unreachable since each role
+        # only runs once per call.
+
+        # Wrap the entire pipeline in a global timeout to prevent
+        # unbounded execution (R4/17 from enterprise review).
+        from paperverifier.config import get_settings
+        pipeline_timeout = getattr(get_settings(), "pipeline_timeout", None)
+        if pipeline_timeout:
+            return await asyncio.wait_for(
+                self._verify_inner(document, external_data, pipeline_start),
+                timeout=pipeline_timeout,
+            )
+        return await self._verify_inner(document, external_data, pipeline_start)
+
+    async def _verify_inner(
+        self,
+        document: ParsedDocument,
+        external_data: dict[str, Any],
+        pipeline_start: float,
+    ) -> VerificationReport:
+        """Inner implementation of verify(), separated for timeout wrapping."""
 
         self._logger.info(
             "verification_started",
@@ -238,7 +264,7 @@ class AgentOrchestrator:
                     agent=agent.role.value,
                     error=str(result),
                 )
-                self._record_failure(agent.role.value)
+                await self._record_failure(agent.role.value)
                 agent_reports.append(
                     AgentReport(
                         agent_role=agent.role.value,
@@ -250,7 +276,7 @@ class AgentOrchestrator:
                 )
             elif isinstance(result, AgentReport):
                 if result.status == "failed":
-                    self._record_failure(agent.role.value)
+                    await self._record_failure(agent.role.value)
                 agent_reports.append(result)
             else:
                 # Unexpected result type
@@ -306,16 +332,17 @@ class AgentOrchestrator:
     # Circuit breaker
     # ------------------------------------------------------------------
 
-    def _record_failure(self, role_name: str) -> None:
+    async def _record_failure(self, role_name: str) -> None:
         """Record a failure for circuit breaker tracking."""
-        self._failure_counts[role_name] += 1
-        if self._failure_counts[role_name] >= _CIRCUIT_BREAKER_THRESHOLD:
-            self._disabled_agents.add(role_name)
-            self._logger.warning(
-                "agent_circuit_breaker_tripped",
-                agent=role_name,
-                failure_count=self._failure_counts[role_name],
-            )
+        async with self._cb_lock:
+            self._failure_counts[role_name] += 1
+            if self._failure_counts[role_name] >= _CIRCUIT_BREAKER_THRESHOLD:
+                self._disabled_agents.add(role_name)
+                self._logger.warning(
+                    "agent_circuit_breaker_tripped",
+                    agent=role_name,
+                    failure_count=self._failure_counts[role_name],
+                )
 
     # ------------------------------------------------------------------
     # Orchestrator synthesis

@@ -5,13 +5,14 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8501:8501"
-    volumes:
-      - ./paperverifier:/app/paperverifier
-      - ./streamlit_app:/app/streamlit_app
-      - ./config:/app/config
     env_file:
       - .env
     environment:
-      - PAPERVERIFIER_LOG_FORMAT=console
-      - PAPERVERIFIER_LOG_LEVEL=DEBUG
+      - PAPERVERIFIER_LOG_FORMAT=json
+      - PAPERVERIFIER_LOG_LEVEL=INFO
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G

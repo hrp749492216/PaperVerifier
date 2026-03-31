@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
+from streamlit_app.auth import require_auth
+
+require_auth()
 
 
 # ---------------------------------------------------------------------------

@@ -83,6 +83,12 @@ class AppSettings(BaseSettings):
         le=300,
         description="Timeout for cloning GitHub repositories.",
     )
+    pipeline_timeout: float = Field(
+        default=1800.0,
+        ge=60,
+        le=7200,
+        description="Global timeout for the entire verification pipeline in seconds.",
+    )
 
     # -- Document limits ----------------------------------------------------
     max_document_size_mb: int = Field(
@@ -248,6 +254,33 @@ def setup_logging(level: str = "INFO", fmt: str = "json") -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Correlation / Request ID
+# ---------------------------------------------------------------------------
+
+
+def bind_request_id(request_id: str | None = None) -> str:
+    """Bind a correlation ID to the current context for structured logging.
+
+    If *request_id* is not provided, a short UUID is generated.  The ID
+    is bound via ``structlog.contextvars`` so all subsequent log entries
+    in the same async/thread context automatically include it.
+
+    Returns the bound request ID.
+    """
+    import uuid as _uuid
+
+    rid = request_id or _uuid.uuid4().hex[:8]
+    structlog.contextvars.bind_contextvars(request_id=rid)
+    return rid
+
+
+def get_request_id() -> str | None:
+    """Return the currently bound request ID, or None if unbound."""
+    ctx = structlog.contextvars.get_contextvars()
+    return ctx.get("request_id")
 
 
 # ---------------------------------------------------------------------------

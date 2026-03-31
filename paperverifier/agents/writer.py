@@ -206,14 +206,11 @@ class WriterAgent(BaseAgent):
         document: ParsedDocument,
         **kwargs: Any,
     ) -> list[Finding]:
-        """Not typically used for the WriterAgent.
+        """Not supported for the WriterAgent.
 
-        The WriterAgent is designed to be called via :meth:`generate_fix`.
-        This method is provided for interface compatibility and returns
-        an empty list.
+        The WriterAgent is designed to be called via :meth:`generate_fix`,
+        not through the ``analyze()`` pipeline.
         """
-        self._logger.info(
-            "writer_analyze_called",
-            hint="Use generate_fix() instead for fix generation",
+        raise NotImplementedError(
+            "WriterAgent does not support analyze(). Use generate_fix() instead."
         )
-        return []

@@ -8,11 +8,11 @@ import pytest
 
 from paperverifier.security.input_validator import (
     InputValidationError,
+    resolve_and_validate_url,
     sanitize_filename,
     validate_uploaded_file,
     validate_url,
 )
-
 
 # ---------------------------------------------------------------------------
 # validate_url
@@ -129,3 +129,36 @@ class TestValidateUploadedFile:
         """Files with disallowed extensions (e.g. .exe) must be rejected."""
         with pytest.raises(InputValidationError, match="extension"):
             validate_uploaded_file("malware.exe", b"MZ\x90\x00")
+
+
+# ---------------------------------------------------------------------------
+# resolve_and_validate_url (DNS-pinning)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveAndValidateURL:
+    """Tests for DNS-pinning URL validation."""
+
+    def test_returns_validated_ip(self) -> None:
+        """resolve_and_validate_url should return the URL and a validated IP."""
+        with patch("paperverifier.security.input_validator.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [
+                (2, 1, 6, "", ("93.184.216.34", 443)),
+            ]
+            url, ip = resolve_and_validate_url("https://example.com/paper.pdf")
+            assert url == "https://example.com/paper.pdf"
+            assert ip == "93.184.216.34"
+
+    def test_blocks_private_ip(self) -> None:
+        """Should reject URLs resolving to private IPs."""
+        with pytest.raises(InputValidationError, match="private|blocked|reserved"):
+            resolve_and_validate_url("https://127.0.0.1/admin")
+
+    def test_blocks_rebind_target(self) -> None:
+        """Should block a hostname resolving to a private IP."""
+        with patch("paperverifier.security.input_validator.socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [
+                (2, 1, 6, "", ("10.0.0.1", 443)),
+            ]
+            with pytest.raises(InputValidationError, match="private|blocked|reserved"):
+                resolve_and_validate_url("https://evil-rebind.example.com/")
