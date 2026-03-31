@@ -86,7 +86,8 @@ class AgentOrchestrator:
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._progress_callback = progress_callback
         self._logger = structlog.get_logger().bind(component="orchestrator")
-        # Circuit breaker state -- reset on each verify() call (HIGH-I2).
+        # Circuit breaker state -- persists across verify() calls so that
+        # repeated failures of the same role trip the breaker.
         self._failure_counts: dict[str, int] = defaultdict(int)
         self._disabled_agents: set[str] = set()
         self._cb_lock = asyncio.Lock()
@@ -124,9 +125,11 @@ class AgentOrchestrator:
         pipeline_start = time.monotonic()
         external_data = external_data or {}
 
-        # Reset circuit breaker state from prior verify() calls (HIGH-I2).
-        self._failure_counts.clear()
-        self._disabled_agents.clear()
+        # Circuit breaker state persists across verify() calls so that
+        # repeated failures of the same agent role across multiple documents
+        # will eventually trip the breaker.  Previously these were cleared
+        # here (HIGH-I2), making the threshold unreachable since each role
+        # only runs once per call.
 
         # Wrap the entire pipeline in a global timeout to prevent
         # unbounded execution (R4/17 from enterprise review).
