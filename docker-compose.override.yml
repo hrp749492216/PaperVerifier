@@ -9,4 +9,6 @@ services:
     environment:
       - PAPERVERIFIER_LOG_FORMAT=console
       - PAPERVERIFIER_LOG_LEVEL=DEBUG
-      - PV_ALLOW_INSECURE_LOCAL=1
+      # WARNING: Set to 1 ONLY for local development. In production,
+      # remove or rename this entire file to avoid disabling authentication.
+      - PV_ALLOW_INSECURE_LOCAL=0

@@ -67,15 +67,18 @@ class AsyncRateLimiter:
     async def acquire(self) -> None:
         """Block until both concurrency and rate constraints are met."""
         await self._semaphore.acquire()
-        async with self._lock:
-            now = time.monotonic()
-            # Discard timestamps outside the 1-second sliding window.
-            self._timestamps = [t for t in self._timestamps if now - t < 1.0]
-            if len(self._timestamps) >= self._rate:
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                # Discard timestamps outside the 1-second sliding window.
+                self._timestamps = [t for t in self._timestamps if now - t < 1.0]
+                if len(self._timestamps) < self._rate:
+                    self._timestamps.append(time.monotonic())
+                    return
                 sleep_time = 1.0 - (now - self._timestamps[0])
-                if sleep_time > 0:
-                    await asyncio.sleep(sleep_time)
-            self._timestamps.append(time.monotonic())
+            # Sleep OUTSIDE the lock so other coroutines aren't blocked.
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
 
     def release(self) -> None:
         """Release the concurrency semaphore."""
