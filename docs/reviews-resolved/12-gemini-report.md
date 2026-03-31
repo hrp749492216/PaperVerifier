@@ -1,5 +1,7 @@
 # Comprehensive Enterprise Audit Report
 
+> **Status: RESOLVED** — Findings F001 and F003 were fixed in PR #2. This is a historical pre-fix report archived for reference.
+
 This document combines the final enterprise audit report with the detailed summaries of each review phase.
 
 ---

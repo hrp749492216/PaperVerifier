@@ -515,19 +515,13 @@ class UnifiedLLMClient:
 
 _CONTEXT_LENGTH_ERROR_CODES: frozenset[str] = frozenset({
     "context_length_exceeded",
-    "max_tokens",
     "string_above_max_length",
-    "invalid_prompt",
 })
 
 _CONTEXT_LENGTH_KEYWORDS: tuple[str, ...] = (
-    "token",
-    "context",
-    "too long",
-    "too many",
-    "length",
-    "maximum context",
-    "max_tokens",
+    "maximum context length",
+    "context length exceeded",
+    "too many tokens",
     "prompt is too long",
 )
 

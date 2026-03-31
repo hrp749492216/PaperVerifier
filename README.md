@@ -15,7 +15,7 @@
 
 ---
 
-PaperVerifier runs **9 specialised verification agents in parallel** across your manuscript, cross-referencing claims against live academic databases, and returns actionable, numbered feedback you can selectively apply — all before you hit "Submit."
+PaperVerifier runs **7 specialised verification agents in parallel** across your manuscript, cross-referencing claims against live academic databases, and returns actionable, numbered feedback you can selectively apply — all before you hit "Submit."
 
 It accepts **PDF, DOCX, LaTeX, Markdown, plain text, GitHub repos, and URLs**, and works with **8 LLM providers** out of the box.
 
