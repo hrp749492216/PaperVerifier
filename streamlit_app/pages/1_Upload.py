@@ -426,11 +426,14 @@ if doc is not None:
                 # HIGH-U2: Poll and update progress bar while worker runs
                 import time
                 while worker.is_alive():
-                    done = int(progress_state["count"])  # type: ignore[arg-type]
+                    # Snapshot shared state under the lock to avoid
+                    # RuntimeError from concurrent dict mutation.
+                    with progress_lock:
+                        done = int(progress_state["count"])  # type: ignore[arg-type]
+                        statuses_snapshot = dict(progress_state["statuses"])  # type: ignore[arg-type]
                     pct = int((done / total_agents) * 100) if total_agents else 0
-                    statuses = progress_state["statuses"]
                     running = [
-                        name for name, s in statuses.items() if s == "running"  # type: ignore[union-attr]
+                        name for name, s in statuses_snapshot.items() if s == "running"
                     ]
                     label = (
                         f"Running: {', '.join(running)}... ({done}/{total_agents} done)"
