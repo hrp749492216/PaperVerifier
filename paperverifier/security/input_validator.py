@@ -122,6 +122,79 @@ def validate_url(url: str) -> str:
     return url
 
 
+def resolve_and_validate_url(url: str) -> tuple[str, str]:
+    """Validate a URL and return a validated IP for DNS-pinning.
+
+    Performs the same validation as :func:`validate_url` but additionally
+    returns one of the resolved IP addresses so the HTTP client can
+    connect directly to it (preventing DNS rebinding / TOCTOU attacks).
+
+    Returns:
+        A tuple of ``(validated_url, resolved_ip)``.
+
+    Raises:
+        InputValidationError: On any validation failure.
+    """
+    if not url or not isinstance(url, str):
+        raise InputValidationError("URL must be a non-empty string.")
+
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError as exc:
+        raise InputValidationError(f"Malformed URL: {exc}") from exc
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in SAFE_URL_SCHEMES:
+        raise InputValidationError(
+            f"URL scheme '{scheme}' is not allowed. Only {SAFE_URL_SCHEMES} permitted."
+        )
+
+    if parsed.username or parsed.password:
+        raise InputValidationError("URLs must not contain embedded credentials.")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise InputValidationError("URL must contain a valid hostname.")
+
+    resolved_ip = _resolve_and_check_ip(hostname)
+    logger.debug("url_validated_with_pin", url=url, pinned_ip=resolved_ip)
+    return url, resolved_ip
+
+
+def _resolve_and_check_ip(hostname: str) -> str:
+    """Resolve *hostname*, validate all IPs, and return the first safe one."""
+    try:
+        addr = ipaddress.ip_address(hostname)
+        _assert_ip_not_blocked(addr, hostname)
+        return str(addr)
+    except ValueError:
+        pass
+
+    try:
+        addrinfos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise InputValidationError(f"DNS resolution failed for '{hostname}': {exc}") from exc
+
+    if not addrinfos:
+        raise InputValidationError(f"DNS resolution returned no addresses for '{hostname}'.")
+
+    first_ip: str | None = None
+    for family, _type, _proto, _canonname, sockaddr in addrinfos:
+        ip_str = sockaddr[0]
+        try:
+            addr = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        _assert_ip_not_blocked(addr, hostname)
+        if first_ip is None:
+            first_ip = ip_str
+
+    if first_ip is None:
+        raise InputValidationError(f"DNS resolution returned no usable addresses for '{hostname}'.")
+
+    return first_ip
+
+
 def _check_hostname_ip(hostname: str) -> None:
     """Resolve *hostname* and verify all addresses are public."""
     try:
