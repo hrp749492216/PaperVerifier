@@ -15,6 +15,7 @@ from pathlib import Path
 import streamlit as st
 
 from streamlit_app.auth import require_auth
+from streamlit_app.rate_limit import SessionRateLimiter
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 require_auth()
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_SIZE_MB = 50
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+# Per-session verification rate limiter (10 requests per hour).
+_verification_limiter = SessionRateLimiter(max_requests=10, window_seconds=3600.0)
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +317,18 @@ if doc is not None:
     )
 
     if st.button("Start Verification", type="primary", key="btn_verify"):
+        # Per-session rate-limit guard
+        session_id = st.session_state.get("_pv_session_id", "anonymous")
+        if not _verification_limiter.check(session_id):
+            wait = _verification_limiter.remaining_wait(session_id)
+            minutes = int(wait // 60)
+            st.error(
+                f"Rate limit exceeded. Please wait {minutes} minutes "
+                "before submitting another verification."
+            )
+            st.stop()
+        _verification_limiter.record(session_id)
+
         # Build client and assignments
         try:
             from paperverifier.llm.client import UnifiedLLMClient
