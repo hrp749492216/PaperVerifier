@@ -6,11 +6,15 @@ delegates to the appropriate parser based on content type.
 
 Includes special handling for arXiv URLs (converting abstract pages
 to direct PDF download links).
+
+DNS-pinning: After validating a URL, the resolved IP is used for the
+actual HTTP connection to prevent DNS-rebinding / TOCTOU attacks.
 """
 
 from __future__ import annotations
 
 import re
+import socket
 import urllib.parse
 from typing import Any
 
@@ -88,11 +92,14 @@ class URLParser(BaseParser):
         # Handle arXiv URLs: convert /abs/ to /pdf/.
         url = self._normalize_arxiv_url(url)
 
-        # Validate URL for SSRF protection.
-        validated_url, _ = resolve_and_validate_url(url)
+        # Validate URL for SSRF protection and pin the resolved IP
+        # to prevent DNS-rebinding attacks (TOCTOU).
+        validated_url, resolved_ip = resolve_and_validate_url(url)
 
-        # Download the content.
-        content, content_type, final_url = await self._download(validated_url)
+        # Download the content using the pinned IP.
+        content, content_type, final_url = await self._download(
+            validated_url, resolved_ip
+        )
 
         # Determine the parser to use.
         parser_type = self._detect_parser_type(content_type, final_url, content)
@@ -144,9 +151,14 @@ class URLParser(BaseParser):
     # ------------------------------------------------------------------
 
     async def _download(
-        self, url: str
+        self, url: str, resolved_ip: str
     ) -> tuple[bytes, str, str]:
         """Download content from a URL with size limits and timeout.
+
+        Args:
+            url: The validated URL to download.
+            resolved_ip: The DNS-pinned IP address to connect to,
+                preventing DNS-rebinding attacks.
 
         Returns:
             A tuple of ``(content_bytes, content_type, final_url)``.
@@ -156,16 +168,26 @@ class URLParser(BaseParser):
             import aiohttp  # type: ignore[import-untyped]
         except ImportError:
             # Fall back to httpx if aiohttp is not available.
-            return await self._download_httpx(url)
+            return await self._download_httpx(url, resolved_ip)
 
         try:
             timeout = aiohttp.ClientTimeout(total=_DOWNLOAD_TIMEOUT)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                # Disable auto-redirects and re-validate each redirect
-                # target to prevent SSRF bypass via redirect (CRIT-2).
-                current_url = url
-                max_redirects = 5
-                for _ in range(max_redirects + 1):
+
+            # Disable auto-redirects and re-validate each redirect
+            # target to prevent SSRF bypass via redirect (CRIT-2).
+            # Each hop gets a fresh session with a pinned-DNS connector
+            # so the connection goes to the validated IP, not a
+            # potentially rebinding hostname.
+            current_url = url
+            current_ip = resolved_ip
+            max_redirects = 5
+            for _ in range(max_redirects + 1):
+                connector = self._make_pinned_connector(
+                    current_url, current_ip
+                )
+                async with aiohttp.ClientSession(
+                    timeout=timeout, connector=connector
+                ) as session:
                     async with session.get(
                         current_url, allow_redirects=False
                     ) as response:
@@ -176,9 +198,14 @@ class URLParser(BaseParser):
                                     f"Redirect with no Location header from: {current_url}"
                                 )
                             # Resolve relative redirects.
-                            location = urllib.parse.urljoin(current_url, location)
-                            # Re-validate the redirect target for SSRF.
-                            current_url, _ = resolve_and_validate_url(location)
+                            location = urllib.parse.urljoin(
+                                current_url, location
+                            )
+                            # Re-validate the redirect target for SSRF
+                            # and pin the new resolved IP.
+                            current_url, current_ip = (
+                                resolve_and_validate_url(location)
+                            )
                             continue
 
                         if response.status != 200:
@@ -200,7 +227,9 @@ class URLParser(BaseParser):
                         # Read with size limit.
                         chunks: list[bytes] = []
                         total_size = 0
-                        async for chunk in response.content.iter_chunked(8192):
+                        async for chunk in response.content.iter_chunked(
+                            8192
+                        ):
                             total_size += len(chunk)
                             if total_size > _MAX_DOWNLOAD_SIZE:
                                 raise InputValidationError(
@@ -217,10 +246,10 @@ class URLParser(BaseParser):
                             content_type=content_type,
                         )
                         return content, content_type, final_url
-                else:
-                    raise InputValidationError(
-                        f"Too many redirects (>{max_redirects}) from: {url}"
-                    )
+            else:
+                raise InputValidationError(
+                    f"Too many redirects (>{max_redirects}) from: {url}"
+                )
 
         except InputValidationError:
             raise
@@ -230,9 +259,9 @@ class URLParser(BaseParser):
             ) from exc
 
     async def _download_httpx(
-        self, url: str
+        self, url: str, resolved_ip: str
     ) -> tuple[bytes, str, str]:
-        """Fallback download using httpx."""
+        """Fallback download using httpx with DNS pinning."""
         try:
             import httpx  # type: ignore[import-untyped]
         except ImportError:
@@ -242,17 +271,19 @@ class URLParser(BaseParser):
             )
 
         try:
+            transport = self._make_pinned_httpx_transport(url, resolved_ip)
             async with httpx.AsyncClient(
                 follow_redirects=False,
                 timeout=_DOWNLOAD_TIMEOUT,
+                transport=transport,
             ) as client:
                 # Manually follow redirects with SSRF re-validation (CRIT-2).
-                # Use a single request chain — no duplicate final fetch
+                # Use a single request chain -- no duplicate final fetch
                 # (Codex-1 fix #6).
                 current_url = url
-                max_redirects = 5
+                current_ip = resolved_ip
                 response = await client.get(current_url)
-                for _ in range(max_redirects):
+                for _ in range(max_redirects := 5):
                     if response.status_code in (301, 302, 303, 307, 308):
                         location = response.headers.get("location")
                         if not location:
@@ -260,8 +291,19 @@ class URLParser(BaseParser):
                                 f"Redirect with no Location header from: {current_url}"
                             )
                         location = urllib.parse.urljoin(current_url, location)
-                        current_url, _ = resolve_and_validate_url(location)
-                        response = await client.get(current_url)
+                        current_url, current_ip = resolve_and_validate_url(
+                            location
+                        )
+                        # Create a fresh client with the new pinned IP.
+                        transport = self._make_pinned_httpx_transport(
+                            current_url, current_ip
+                        )
+                        async with httpx.AsyncClient(
+                            follow_redirects=False,
+                            timeout=_DOWNLOAD_TIMEOUT,
+                            transport=transport,
+                        ) as redirect_client:
+                            response = await redirect_client.get(current_url)
                         continue
                     break
                 else:
@@ -312,6 +354,104 @@ class URLParser(BaseParser):
             raise InputValidationError(
                 f"Failed to download URL: {url} -- {exc}"
             ) from exc
+
+    # ------------------------------------------------------------------
+    # DNS-pinning helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_pinned_connector(
+        url: str, resolved_ip: str
+    ) -> Any:
+        """Create an aiohttp ``TCPConnector`` that pins DNS resolution.
+
+        The connector uses a custom resolver that always returns the
+        pre-validated *resolved_ip* for the hostname in *url*, preventing
+        DNS-rebinding attacks between validation and connection time.
+        """
+        import aiohttp  # type: ignore[import-untyped]
+        from aiohttp.abc import AbstractResolver  # type: ignore[import-untyped]
+
+        parsed = urllib.parse.urlparse(url)
+        pinned_host = parsed.hostname
+
+        class _PinnedResolver(AbstractResolver):
+            """Resolver that returns the pre-validated IP."""
+
+            async def resolve(
+                self,
+                host: str,
+                port: int = 0,
+                family: int = socket.AF_INET,
+            ) -> list[dict[str, Any]]:
+                if host == pinned_host:
+                    return [
+                        {
+                            "hostname": host,
+                            "host": resolved_ip,
+                            "port": port,
+                            "family": family,
+                            "proto": 0,
+                            "flags": socket.AI_NUMERICHOST,
+                        }
+                    ]
+                # For any other host (should not happen), fall back to
+                # standard resolution -- but this path is unexpected.
+                raise OSError(
+                    f"DNS resolution blocked: unexpected host '{host}' "
+                    f"(expected '{pinned_host}')"
+                )
+
+            async def close(self) -> None:
+                pass
+
+        return aiohttp.TCPConnector(resolver=_PinnedResolver())
+
+    @staticmethod
+    def _make_pinned_httpx_transport(
+        url: str, resolved_ip: str
+    ) -> Any:
+        """Create an httpx transport that pins DNS to the validated IP.
+
+        Uses httpx's ``transport`` parameter with a custom map so the
+        hostname resolves to the pre-validated IP, preventing DNS-rebinding.
+        """
+        import httpx  # type: ignore[import-untyped]
+
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+        # httpx's AsyncHTTPTransport accepts a local_address mapping
+        # through the underlying httpcore backend.  The simplest robust
+        # approach is to use the `uds` / socket-level pinning via a
+        # custom transport wrapper that overrides connection creation.
+
+        class _PinnedTransport(httpx.AsyncHTTPTransport):
+            """Transport that forces connections to the pinned IP."""
+
+            async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+                # Rewrite the URL's host to the pinned IP for the
+                # actual TCP connection, preserving the original Host
+                # header for TLS SNI and virtual hosting.
+                if request.url.host == hostname:
+                    pinned_url = request.url.copy_with(
+                        host=resolved_ip,
+                        port=port,
+                    )
+                    request = httpx.Request(
+                        method=request.method,
+                        url=pinned_url,
+                        headers=request.headers,
+                        content=request.content,
+                        extensions=request.extensions,
+                    )
+                    # Ensure the Host header reflects the original
+                    # hostname (not the IP) for correct TLS/SNI.
+                    request.headers["host"] = hostname
+                return await super().handle_async_request(request)
+
+        return _PinnedTransport(verify=True)
 
     # ------------------------------------------------------------------
     # Content type detection
