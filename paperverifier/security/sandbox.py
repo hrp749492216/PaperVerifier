@@ -35,6 +35,7 @@ _SAFE_CLONE_EXTENSIONS = {".pdf", ".tex", ".md", ".txt", ".docx", ".doc", ".bib"
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class SandboxError(Exception):
     """Base exception for sandbox failures."""
 
@@ -46,6 +47,7 @@ class SandboxTimeoutError(SandboxError):
 # ---------------------------------------------------------------------------
 # Core sandboxed execution
 # ---------------------------------------------------------------------------
+
 
 async def run_sandboxed(
     cmd: list[str],
@@ -114,15 +116,15 @@ async def run_sandboxed(
             proc.communicate(),
             timeout=timeout,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Kill the entire process group.
         _kill_process_group(proc)
         try:
             await asyncio.wait_for(proc.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # Process didn't exit; it will become an orphan.
         logger.warning("sandbox_timeout", cmd=cmd[:3], timeout=timeout)
-        raise SandboxTimeoutError(
+        raise SandboxTimeoutError(  # noqa: B904
             f"Command timed out after {timeout}s: {' '.join(cmd[:3])}"
         )
 
@@ -151,6 +153,7 @@ async def run_sandboxed(
 # ---------------------------------------------------------------------------
 # Git clone
 # ---------------------------------------------------------------------------
+
 
 async def clone_github_repo(
     url: str,
@@ -199,20 +202,26 @@ async def clone_github_repo(
 
     # Build a locked-down environment for Git.
     git_env = _build_minimal_env()
-    git_env.update({
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(target_dir),  # Prevents reading ~/.gitconfig
-        "GIT_TERMINAL_PROMPT": "0",  # Never prompt for credentials
-    })
+    git_env.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": "/dev/null",
+            "HOME": str(target_dir),  # Prevents reading ~/.gitconfig
+            "GIT_TERMINAL_PROMPT": "0",  # Never prompt for credentials
+        }
+    )
 
     # --- Step 1: shallow clone, no checkout ---
     clone_cmd = [
-        "git", "clone",
-        "--depth", "1",
+        "git",
+        "clone",
+        "--depth",
+        "1",
         "--no-checkout",
-        "-c", "core.hooksPath=/dev/null",
-        "-c", "core.symlinks=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.symlinks=false",
         url,
         str(clone_dir),
     ]
@@ -227,9 +236,7 @@ async def clone_github_repo(
 
     if result.returncode != 0:
         cleanup_temp_dir(target_dir)
-        raise SandboxError(
-            f"git clone failed (exit {result.returncode}): {result.stderr[:500]}"
-        )
+        raise SandboxError(f"git clone failed (exit {result.returncode}): {result.stderr[:500]}")
 
     # --- Step 2: sparse checkout of safe file types only ---
     # Build pathspec list for git checkout.
@@ -237,7 +244,8 @@ async def clone_github_repo(
 
     checkout_cmd = [
         "git",
-        "-c", "core.hooksPath=/dev/null",
+        "-c",
+        "core.hooksPath=/dev/null",
         "checkout",
         "HEAD",
         "--",
@@ -273,6 +281,7 @@ async def clone_github_repo(
 # ---------------------------------------------------------------------------
 # Post-clone validation
 # ---------------------------------------------------------------------------
+
 
 def _validate_clone_contents(clone_dir: Path) -> None:
     """Validate the contents of a cloned repository.
@@ -331,6 +340,7 @@ def _validate_clone_contents(clone_dir: Path) -> None:
 # Cleanup
 # ---------------------------------------------------------------------------
 
+
 def cleanup_temp_dir(path: Path) -> None:
     """Safely remove a temporary directory and all its contents.
 
@@ -359,6 +369,7 @@ def cleanup_temp_dir(path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_minimal_env() -> dict[str, str]:
     """Construct a minimal environment for sandboxed processes.

@@ -54,10 +54,13 @@ class CrossRefClient:
     ) -> None:
         self._email = email
         self._rate_limiter = rate_limiter or AsyncRateLimiter(
-            max_concurrent=3, requests_per_second=5.0,
+            max_concurrent=3,
+            requests_per_second=5.0,
         )
         self._circuit_breaker = CircuitBreaker(
-            failure_threshold=3, recovery_timeout=60.0, name="crossref",
+            failure_threshold=3,
+            recovery_timeout=60.0,
+            name="crossref",
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
@@ -83,7 +86,8 @@ class CrossRefClient:
                     else "PaperVerifier/0.1",
                 }
                 self._session = aiohttp.ClientSession(
-                    headers=headers, timeout=self._timeout,
+                    headers=headers,
+                    timeout=self._timeout,
                 )
             return self._session
 
@@ -136,7 +140,7 @@ class CrossRefClient:
                     data: dict[str, Any] = await resp.json(content_type=None)
                     await self._circuit_breaker.record_success()
                     return data
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("crossref_timeout", endpoint=endpoint)
                 await self._circuit_breaker.record_failure()
                 return None

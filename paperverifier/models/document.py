@@ -147,9 +147,7 @@ class ParsedDocument(BaseModel):
         """Reconstruct *full_text* with 1-based line numbers for display."""
         lines = self.full_text.splitlines()
         width = len(str(len(lines)))
-        return "\n".join(
-            f"{i + 1:>{width}} | {line}" for i, line in enumerate(lines)
-        )
+        return "\n".join(f"{i + 1:>{width}} | {line}" for i, line in enumerate(lines))
 
 
 # ======================================================================

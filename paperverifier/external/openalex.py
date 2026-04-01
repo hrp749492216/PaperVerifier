@@ -54,10 +54,13 @@ class OpenAlexClient:
     ) -> None:
         self._email = email
         self._rate_limiter = rate_limiter or AsyncRateLimiter(
-            max_concurrent=3, requests_per_second=5.0,
+            max_concurrent=3,
+            requests_per_second=5.0,
         )
         self._circuit_breaker = CircuitBreaker(
-            failure_threshold=3, recovery_timeout=60.0, name="openalex",
+            failure_threshold=3,
+            recovery_timeout=60.0,
+            name="openalex",
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
@@ -81,7 +84,8 @@ class OpenAlexClient:
                 if self._email:
                     headers["User-Agent"] = f"PaperVerifier/0.1 (mailto:{self._email})"
                 self._session = aiohttp.ClientSession(
-                    headers=headers, timeout=self._timeout,
+                    headers=headers,
+                    timeout=self._timeout,
                 )
             return self._session
 
@@ -123,7 +127,7 @@ class OpenAlexClient:
                     data: dict[str, Any] = await resp.json(content_type=None)
                     await self._circuit_breaker.record_success()
                     return data
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("openalex_timeout", endpoint=endpoint)
                 await self._circuit_breaker.record_failure()
                 return None
@@ -172,8 +176,8 @@ class OpenAlexClient:
             prefix is added automatically if missing.
         """
         if doi.startswith("https://doi.org/"):
-            doi = doi[len("https://doi.org/"):]
-        encoded_doi = _url_quote(doi, safe='')
+            doi = doi[len("https://doi.org/") :]
+        encoded_doi = _url_quote(doi, safe="")
         url = f"https://doi.org/{encoded_doi}"
         return await self._request(f"/works/{_url_quote(url, safe='')}")
 

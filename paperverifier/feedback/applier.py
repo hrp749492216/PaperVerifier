@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from paperverifier.agents.writer import WriterAgent
 from paperverifier.llm.client import UnifiedLLMClient
 from paperverifier.llm.roles import RoleAssignment
-from paperverifier.models.document import ParsedDocument, Sentence, Paragraph, Section
+from paperverifier.models.document import Paragraph, ParsedDocument, Section, Sentence
 from paperverifier.models.findings import Finding
 from paperverifier.models.report import FeedbackItem, VerificationReport
 
@@ -43,9 +43,7 @@ class FeedbackConflictError(Exception):
     def __init__(self, conflicts: list[tuple[int, int]]) -> None:
         self.conflicts = conflicts
         conflict_strs = [f"#{a} <-> #{b}" for a, b in conflicts]
-        super().__init__(
-            f"Conflicting feedback items detected: {', '.join(conflict_strs)}"
-        )
+        super().__init__(f"Conflicting feedback items detected: {', '.join(conflict_strs)}")
 
 
 # ------------------------------------------------------------------
@@ -117,9 +115,7 @@ class FeedbackApplier:
     # Conflict detection
     # ------------------------------------------------------------------
 
-    def detect_conflicts(
-        self, items: list[FeedbackItem]
-    ) -> list[tuple[int, int]]:
+    def detect_conflicts(self, items: list[FeedbackItem]) -> list[tuple[int, int]]:
         """Detect conflicting feedback items.
 
         Two items conflict when:
@@ -225,18 +221,14 @@ class FeedbackApplier:
         )
 
         # ---- 1. Validate selected items exist ----
-        item_map: dict[int, FeedbackItem] = {
-            item.number: item for item in report.feedback_items
-        }
+        item_map: dict[int, FeedbackItem] = {item.number: item for item in report.feedback_items}
         valid_items: list[FeedbackItem] = []
         for num in selected_items:
             if num not in item_map:
                 result.errors.append(f"Feedback item #{num} does not exist.")
                 result.skipped_items.append(num)
             elif not item_map[num].applicable:
-                result.errors.append(
-                    f"Feedback item #{num} is not applicable (no suggestion)."
-                )
+                result.errors.append(f"Feedback item #{num} is not applicable (no suggestion).")
                 result.skipped_items.append(num)
             else:
                 valid_items.append(item_map[num])
@@ -264,9 +256,7 @@ class FeedbackApplier:
             valid_items = [it for it in valid_items if it.number not in to_skip]
             for num in to_skip:
                 result.skipped_items.append(num)
-                result.errors.append(
-                    f"Feedback item #{num} skipped due to conflict (force mode)."
-                )
+                result.errors.append(f"Feedback item #{num} skipped due to conflict (force mode).")
 
         # ---- 3. Sort bottom-up ----
         sorted_items = self._sort_items_for_application(valid_items, document)
@@ -307,9 +297,7 @@ class FeedbackApplier:
 
             except Exception as exc:
                 result.skipped_items.append(item.number)
-                result.errors.append(
-                    f"Feedback item #{item.number}: unexpected error: {exc}"
-                )
+                result.errors.append(f"Feedback item #{item.number}: unexpected error: {exc}")
                 logger.error(
                     "feedback_item_error",
                     item_number=item.number,

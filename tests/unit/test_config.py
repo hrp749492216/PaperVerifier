@@ -123,29 +123,37 @@ class TestRequestID:
 
     def test_bind_generates_id(self) -> None:
         import structlog
+
         structlog.contextvars.clear_contextvars()
         from paperverifier.config import bind_request_id
+
         request_id = bind_request_id()
         assert isinstance(request_id, str)
         assert len(request_id) == 8
 
     def test_bind_uses_provided_id(self) -> None:
         import structlog
+
         structlog.contextvars.clear_contextvars()
         from paperverifier.config import bind_request_id
+
         request_id = bind_request_id("custom-123")
         assert request_id == "custom-123"
 
     def test_get_returns_bound_id(self) -> None:
         import structlog
+
         structlog.contextvars.clear_contextvars()
         from paperverifier.config import bind_request_id, get_request_id
+
         expected = bind_request_id()
         assert get_request_id() == expected
 
     def test_get_returns_none_when_unbound(self) -> None:
         import structlog
+
         structlog.contextvars.clear_contextvars()
         from paperverifier.config import get_request_id
+
         result = get_request_id()
         assert result is None

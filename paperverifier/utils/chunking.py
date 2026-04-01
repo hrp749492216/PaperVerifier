@@ -349,7 +349,9 @@ def chunk_document(
             raw_chunks.extend(window_chunks)
         else:
             # Can we merge with the current buffer?
-            merged_tokens = count_tokens_estimate(merge_text + "\n\n" + sec_text if merge_text else sec_text)
+            merged_tokens = count_tokens_estimate(
+                merge_text + "\n\n" + sec_text if merge_text else sec_text
+            )
             if merged_tokens <= budget_tokens:
                 # Merge
                 if merge_text:
@@ -453,7 +455,9 @@ def create_document_summary(
         prefix = "  " * indent
         para_count = len(sec.paragraphs)
         sent_count = sum(len(p.sentences) for p in sec.paragraphs)
-        lines = [f"{prefix}- [{sec.id}] {sec.title} ({para_count} paragraphs, {sent_count} sentences)"]
+        lines = [
+            f"{prefix}- [{sec.id}] {sec.title} ({para_count} paragraphs, {sent_count} sentences)"
+        ]
         for sub in sec.subsections:
             lines.extend(_outline_section(sub, indent + 1))
         return lines

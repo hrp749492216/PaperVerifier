@@ -19,6 +19,7 @@ from paperverifier.models.report import VerificationReport
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_report() -> VerificationReport:
     """Build a minimal VerificationReport that satisfies CLI display logic."""
     return VerificationReport(
@@ -38,6 +39,7 @@ def _make_mock_report() -> VerificationReport:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_verify_version():
     """``cli --version`` should exit 0 and print a version string."""
@@ -65,7 +67,9 @@ def test_verify_with_text_file():
 
     # Create a temporary text file with plausible content
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False,
+        mode="w",
+        suffix=".txt",
+        delete=False,
     ) as tmp:
         tmp.write(
             "Title: A Study on Testing\n\n"
@@ -124,6 +128,7 @@ def test_verify_with_text_file():
             print("STDERR:", getattr(result, "stderr", "N/A"))
             if result.exception:
                 import traceback
+
                 traceback.print_exception(
                     type(result.exception),
                     result.exception,

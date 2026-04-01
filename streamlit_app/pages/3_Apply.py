@@ -40,8 +40,7 @@ doc = st.session_state.get("parsed_document")
 
 if not selected_items or report is None or doc is None:
     st.warning(
-        "No findings selected for application. "
-        "Please go to the Review page and select items first."
+        "No findings selected for application. Please go to the Review page and select items first."
     )
     st.page_link(
         "streamlit_app/pages/2_Review.py",
@@ -76,8 +75,7 @@ for num in valid_selected:
         "info": "\u2139\ufe0f",
     }.get(f.severity.value, "")
     st.markdown(
-        f"- {sev_icon} **#{num}** | {f.severity.value.upper()} | "
-        f"{f.category.value} | {f.title}"
+        f"- {sev_icon} **#{num}** | {f.severity.value.upper()} | {f.category.value} | {f.title}"
     )
 
 # ---------------------------------------------------------------------------
@@ -92,7 +90,7 @@ conflicts: list[tuple[int, int]] = []
 force_mode = False
 
 try:
-    from paperverifier.feedback.applier import FeedbackApplier, FeedbackConflictError
+    from paperverifier.feedback.applier import FeedbackApplier
 
     applier = FeedbackApplier()
     selected_feedback_items = [item_map[n] for n in valid_selected]
@@ -115,11 +113,14 @@ try:
     else:
         st.success("No conflicts detected among selected items.")
 
-except Exception as exc:
+except Exception:
     import logging
     import uuid as _uuid_mod
+
     _err_id = _uuid_mod.uuid4().hex[:8]
-    logging.getLogger(__name__).error("conflict_detection_failed error_id=%s", _err_id, exc_info=True)
+    logging.getLogger(__name__).error(
+        "conflict_detection_failed error_id=%s", _err_id, exc_info=True
+    )
     st.error(f"Error during conflict detection. Error ID: {_err_id}")
     st.stop()
 
@@ -133,8 +134,6 @@ if st.button("Apply Changes", type="primary", key="btn_apply"):
     with st.status("Applying feedback...", expanded=True) as status:
         try:
             from paperverifier.feedback.applier import FeedbackApplier
-            from paperverifier.llm.client import UnifiedLLMClient
-            from paperverifier.llm.config_store import load_role_assignments
             from paperverifier.llm.roles import AgentRole
 
             # Try to create a writer-backed applier if possible
@@ -168,11 +167,9 @@ if st.button("Apply Changes", type="primary", key="btn_apply"):
 
             st.session_state["applied_feedback"] = applied_feedback
 
-            status.update(
-                label="Feedback applied!", state="complete", expanded=False
-            )
+            status.update(label="Feedback applied!", state="complete", expanded=False)
 
-        except Exception as exc:
+        except Exception:
             # Log full traceback server-side; show only sanitized
             # message to users (Codex-2).
             import logging

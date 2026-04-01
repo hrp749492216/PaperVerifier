@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from paperverifier.agents.base import BaseAgent
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
@@ -20,8 +21,6 @@ from paperverifier.utils.chunking import (
     create_document_summary,
 )
 from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
 

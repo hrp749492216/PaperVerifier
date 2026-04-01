@@ -9,24 +9,21 @@ from __future__ import annotations
 import pytest
 
 from paperverifier.feedback.applier import (
-    AppliedFeedback,
     FeedbackApplier,
     FeedbackChange,
     FeedbackConflictError,
 )
 from paperverifier.models.document import (
-    ParsedDocument,
     Paragraph,
+    ParsedDocument,
     Section,
     Sentence,
 )
 from paperverifier.models.findings import Finding, FindingCategory, Severity
 from paperverifier.models.report import (
-    AgentReport,
     FeedbackItem,
     VerificationReport,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -200,15 +197,21 @@ class TestConflictDetection:
             FeedbackItem(
                 number=1,
                 finding=_make_finding(
-                    "seg-a", "overlap", "fix",
-                    start_char=10, end_char=30,
+                    "seg-a",
+                    "overlap",
+                    "fix",
+                    start_char=10,
+                    end_char=30,
                 ),
             ),
             FeedbackItem(
                 number=2,
                 finding=_make_finding(
-                    "seg-b", "overlap", "fix",
-                    start_char=20, end_char=40,
+                    "seg-b",
+                    "overlap",
+                    "fix",
+                    start_char=20,
+                    end_char=40,
                 ),
             ),
         ]

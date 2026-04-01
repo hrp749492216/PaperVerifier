@@ -14,10 +14,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from paperverifier.config import get_settings
 from streamlit_app.auth import require_auth
 from streamlit_app.rate_limit import SessionRateLimiter
 from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
-from paperverifier.config import get_settings
 
 require_auth()
 
@@ -64,9 +64,7 @@ for key, default in [
 # Input methods (tabs)
 # ---------------------------------------------------------------------------
 
-tab_upload, tab_url, tab_github = st.tabs(
-    ["File Upload", "URL Input", "GitHub Repository"]
-)
+tab_upload, tab_url, tab_github = st.tabs(["File Upload", "URL Input", "GitHub Repository"])
 
 parsed_document = None
 
@@ -100,13 +98,12 @@ with tab_upload:
             with st.status("Parsing document...", expanded=True) as status:
                 tmp_path: str | None = None
                 try:
-                    from paperverifier.parsers.router import InputRouter
-
-                    from paperverifier.security.input_validator import (
-                        validate_uploaded_file,
-                        InputValidationError,
-                    )
                     from paperverifier.config import get_settings
+                    from paperverifier.parsers.router import InputRouter
+                    from paperverifier.security.input_validator import (
+                        InputValidationError,
+                        validate_uploaded_file,
+                    )
 
                     st.write("Reading file content...")
                     file_bytes = uploaded_file.read()
@@ -122,17 +119,13 @@ with tab_upload:
 
                     # Write to a temp file so the router can detect by extension
                     suffix = Path(file_name).suffix
-                    with tempfile.NamedTemporaryFile(
-                        delete=False, suffix=suffix
-                    ) as tmp:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                         tmp.write(file_bytes)
                         tmp_path = tmp.name
 
                     st.write(f"Routing to parser for *{suffix}* format...")
                     router = InputRouter()
-                    parsed_document = run_async(
-                        router.parse(tmp_path, content=file_bytes)
-                    )
+                    parsed_document = run_async(router.parse(tmp_path, content=file_bytes))
 
                     # MED-U5: Clear stale downstream state on new parse
                     st.session_state["verification_report"] = None
@@ -140,11 +133,9 @@ with tab_upload:
                     st.session_state["applied_feedback"] = None
 
                     st.session_state["parsed_document"] = parsed_document
-                    status.update(
-                        label="Parsing complete!", state="complete", expanded=False
-                    )
+                    status.update(label="Parsing complete!", state="complete", expanded=False)
 
-                except Exception as exc:
+                except Exception:
                     error_id = str(_uuid.uuid4())[:8]
                     logger.error("parse_failed", exc_info=True, extra={"error_id": error_id})
                     st.error(f"Failed to parse document. Error ID: {error_id}")
@@ -165,11 +156,11 @@ with tab_url:
 
     if paper_url:
         if st.button("Fetch & Parse", key="btn_parse_url"):
-            from paperverifier.security.input_validator import validate_url, InputValidationError
+            from paperverifier.security.input_validator import InputValidationError, validate_url
 
             try:
                 validate_url(paper_url)
-            except InputValidationError as exc:
+            except InputValidationError:
                 error_id = str(_uuid.uuid4())[:8]
                 logger.error("invalid_url", exc_info=True, extra={"error_id": error_id})
                 st.error(f"Invalid URL. Error ID: {error_id}")
@@ -179,7 +170,7 @@ with tab_url:
                 try:
                     from paperverifier.parsers.router import InputRouter
 
-                    st.write(f"Fetching from URL...")
+                    st.write("Fetching from URL...")
                     router = InputRouter()
                     parsed_document = run_async(router.parse(paper_url))
 
@@ -195,7 +186,7 @@ with tab_url:
                         expanded=False,
                     )
 
-                except Exception as exc:
+                except Exception:
                     error_id = str(_uuid.uuid4())[:8]
                     logger.error("url_parse_failed", exc_info=True, extra={"error_id": error_id})
                     st.error(f"Failed to fetch or parse URL. Error ID: {error_id}")
@@ -212,11 +203,14 @@ with tab_github:
 
     if github_url:
         if st.button("Clone & Parse", key="btn_parse_github"):
-            from paperverifier.security.input_validator import validate_github_url, InputValidationError
+            from paperverifier.security.input_validator import (
+                InputValidationError,
+                validate_github_url,
+            )
 
             try:
                 validate_github_url(github_url)
-            except InputValidationError as exc:
+            except InputValidationError:
                 error_id = str(_uuid.uuid4())[:8]
                 logger.error("invalid_github_url", exc_info=True, extra={"error_id": error_id})
                 st.error(f"Invalid GitHub URL. Error ID: {error_id}")
@@ -242,7 +236,7 @@ with tab_github:
                         expanded=False,
                     )
 
-                except Exception as exc:
+                except Exception:
                     error_id = str(_uuid.uuid4())[:8]
                     logger.error("github_parse_failed", exc_info=True, extra={"error_id": error_id})
                     st.error(f"Failed to clone or parse repository. Error ID: {error_id}")
@@ -334,10 +328,9 @@ if doc is not None:
 
         # Build client and assignments
         try:
+            from paperverifier.agents.orchestrator import AgentOrchestrator
             from paperverifier.llm.client import UnifiedLLMClient
             from paperverifier.llm.config_store import load_role_assignments
-            from paperverifier.llm.roles import AgentRole
-            from paperverifier.agents.orchestrator import AgentOrchestrator
 
             client = st.session_state.get("llm_client")
             if client is None:
@@ -397,9 +390,7 @@ if doc is not None:
                     from paperverifier.external.enrichment import enrich_document
 
                     try:
-                        external_data = loop.run_until_complete(
-                            enrich_document(doc)
-                        )
+                        external_data = loop.run_until_complete(enrich_document(doc))
                     except Exception:
                         logger.exception("enrichment_failed")
                         external_data = {}
@@ -413,9 +404,7 @@ if doc is not None:
                 finally:
                     loop.close()
 
-            with st.status(
-                "Running verification pipeline...", expanded=True
-            ) as run_status:
+            with st.status("Running verification pipeline...", expanded=True) as run_status:
                 for role_name in expected_agents:
                     st.write(f"Agent queued: **{role_name}**")
 
@@ -425,6 +414,7 @@ if doc is not None:
 
                 # HIGH-U2: Poll and update progress bar while worker runs
                 import time
+
                 while worker.is_alive():
                     # Snapshot shared state under the lock to avoid
                     # RuntimeError from concurrent dict mutation.
@@ -432,9 +422,7 @@ if doc is not None:
                         done = int(progress_state["count"])  # type: ignore[arg-type]
                         statuses_snapshot = dict(progress_state["statuses"])  # type: ignore[arg-type]
                     pct = int((done / total_agents) * 100) if total_agents else 0
-                    running = [
-                        name for name, s in statuses_snapshot.items() if s == "running"
-                    ]
+                    running = [name for name, s in statuses_snapshot.items() if s == "running"]
                     label = (
                         f"Running: {', '.join(running)}... ({done}/{total_agents} done)"
                         if running
@@ -453,17 +441,11 @@ if doc is not None:
                 st.session_state["verification_report"] = report
 
                 # Display completion info
-                st.write(
-                    f"Completed: {report.agents_completed}/{report.agents_total} agents"
-                )
+                st.write(f"Completed: {report.agents_completed}/{report.agents_total} agents")
                 st.write(f"Total findings: {report.total_findings}")
-                st.write(
-                    f"Duration: {report.duration_seconds:.1f}s"
-                )
+                st.write(f"Duration: {report.duration_seconds:.1f}s")
 
-                run_status.update(
-                    label="Verification complete!", state="complete", expanded=False
-                )
+                run_status.update(label="Verification complete!", state="complete", expanded=False)
 
             progress_bar.progress(100, text="Verification complete!")
 
@@ -477,9 +459,7 @@ if doc is not None:
             # Display severity breakdown
             if report.severity_counts:
                 sev_cols = st.columns(len(report.severity_counts))
-                for idx, (sev, count) in enumerate(
-                    sorted(report.severity_counts.items())
-                ):
+                for idx, (sev, count) in enumerate(sorted(report.severity_counts.items())):
                     with sev_cols[idx]:
                         st.metric(sev.capitalize(), count)
 
@@ -489,7 +469,7 @@ if doc is not None:
                 icon="\u27a1\ufe0f",
             )
 
-        except Exception as exc:
+        except Exception:
             # Show only a sanitized error message to users; log full
             # traceback server-side only (Codex-2).
             error_id = str(_uuid.uuid4())[:8]

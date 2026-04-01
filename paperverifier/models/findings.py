@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     """How severe a finding is, from informational to critical."""
 
     CRITICAL = "critical"
@@ -17,7 +17,7 @@ class Severity(str, Enum):
     INFO = "info"
 
 
-class FindingCategory(str, Enum):
+class FindingCategory(StrEnum):
     """Broad category that a finding belongs to."""
 
     STRUCTURE = "structure"
@@ -32,7 +32,7 @@ class FindingCategory(str, Enum):
     GENERAL = "general"
 
 
-class ConfidenceLevel(str, Enum):
+class ConfidenceLevel(StrEnum):
     """Confidence in a reference verification outcome."""
 
     VERIFIED = "verified"

@@ -39,6 +39,7 @@ logger = structlog.get_logger(__name__)
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Message:
     """A single chat message.
@@ -72,6 +73,7 @@ class LLMResponse:
 # ---------------------------------------------------------------------------
 # Client
 # ---------------------------------------------------------------------------
+
 
 class UnifiedLLMClient:
     """Async LLM client that abstracts over multiple providers.
@@ -139,7 +141,11 @@ class UnifiedLLMClient:
         )
 
     def set_api_key(
-        self, provider: LLMProvider, key: str, *, persist: bool = True,
+        self,
+        provider: LLMProvider,
+        key: str,
+        *,
+        persist: bool = True,
     ) -> None:
         """Store an API key in the runtime cache, optionally persisting to keyring.
 
@@ -284,7 +290,9 @@ class UnifiedLLMClient:
         """Return True if *model* is an OpenAI o-series reasoning model."""
         # Matches o1, o1-mini, o1-preview, o3, o3-mini, o4-mini, etc.
         basename = model.split("/")[-1]  # handle org/model prefixes
-        return bool(basename) and basename[0] == "o" and len(basename) > 1 and basename[1:2].isdigit()
+        return (
+            bool(basename) and basename[0] == "o" and len(basename) > 1 and basename[1:2].isdigit()
+        )
 
     async def _complete_openai(
         self,
@@ -429,15 +437,24 @@ class UnifiedLLMClient:
         try:
             if spec.sdk_backend == SDKBackend.ANTHROPIC:
                 coro = self._complete_anthropic(
-                    messages, model, temperature, max_tokens, api_key,
+                    messages,
+                    model,
+                    temperature,
+                    max_tokens,
+                    api_key,
                 )
             else:
                 coro = self._complete_openai(
-                    messages, model, temperature, max_tokens,
-                    spec.base_url, api_key, provider,
+                    messages,
+                    model,
+                    temperature,
+                    max_tokens,
+                    spec.base_url,
+                    api_key,
+                    provider,
                 )
             response = await asyncio.wait_for(coro, timeout=timeout)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise LLMTimeoutError(
                 f"Request timed out after {timeout}s.",
                 provider=provider.value,
@@ -513,10 +530,12 @@ class UnifiedLLMClient:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_CONTEXT_LENGTH_ERROR_CODES: frozenset[str] = frozenset({
-    "context_length_exceeded",
-    "string_above_max_length",
-})
+_CONTEXT_LENGTH_ERROR_CODES: frozenset[str] = frozenset(
+    {
+        "context_length_exceeded",
+        "string_above_max_length",
+    }
+)
 
 _CONTEXT_LENGTH_KEYWORDS: tuple[str, ...] = (
     "maximum context length",

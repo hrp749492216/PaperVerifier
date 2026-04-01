@@ -8,10 +8,10 @@ variable for the API key, and the list of recommended models.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     """Supported LLM providers."""
 
     ANTHROPIC = "anthropic"
@@ -24,7 +24,7 @@ class LLMProvider(str, Enum):
     DEEPSEEK = "deepseek"
 
 
-class SDKBackend(str, Enum):
+class SDKBackend(StrEnum):
     """Which SDK to use for a given provider."""
 
     ANTHROPIC = "anthropic"

@@ -7,7 +7,6 @@ the full report in JSON or Markdown format.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import streamlit as st
@@ -29,9 +28,7 @@ def _build_markdown_report(rpt: Any) -> str:
     if rpt.document_title:
         lines.append(f"\n**Document:** {rpt.document_title}")
     lines.append(f"\n**Date:** {rpt.created_at.strftime('%Y-%m-%d %H:%M UTC')}")
-    lines.append(
-        f"\n**Agents:** {rpt.agents_completed}/{rpt.agents_total} completed"
-    )
+    lines.append(f"\n**Agents:** {rpt.agents_completed}/{rpt.agents_total} completed")
     lines.append(f"**Duration:** {rpt.duration_seconds:.1f}s")
     if rpt.overall_score is not None:
         lines.append(f"**Overall Score:** {rpt.overall_score:.0%}")
@@ -48,9 +45,7 @@ def _build_markdown_report(rpt: Any) -> str:
     lines.append(f"\n## Findings ({rpt.total_findings} total)\n")
     for item in rpt.feedback_items:
         f = item.finding
-        lines.append(
-            f"### #{item.number} [{f.severity.value.upper()}] {f.title}\n"
-        )
+        lines.append(f"### #{item.number} [{f.severity.value.upper()}] {f.title}\n")
         lines.append(f"- **Category:** {f.category.value}")
         lines.append(f"- **Agent:** {f.agent_role}")
         lines.append(f"- **Confidence:** {f.confidence:.0%}")
@@ -161,9 +156,7 @@ with summary_col:
     if report.total_tokens:
         input_tok = report.total_tokens.get("input_tokens", 0)
         output_tok = report.total_tokens.get("output_tokens", 0)
-        st.caption(
-            f"Tokens used: {input_tok:,} input / {output_tok:,} output"
-        )
+        st.caption(f"Tokens used: {input_tok:,} input / {output_tok:,} output")
 
 # ---------------------------------------------------------------------------
 # Severity metrics
@@ -194,9 +187,12 @@ agent_cols = st.columns(min(len(report.agent_reports), 4) or 1)
 for idx, ar in enumerate(report.agent_reports):
     with agent_cols[idx % len(agent_cols)]:
         status_icon = (
-            "\u2705" if ar.status == "completed"
-            else "\u274c" if ar.status == "failed"
-            else "\u26a0\ufe0f" if ar.status == "disabled"
+            "\u2705"
+            if ar.status == "completed"
+            else "\u274c"
+            if ar.status == "failed"
+            else "\u26a0\ufe0f"
+            if ar.status == "disabled"
             else "\u2753"
         )
         st.markdown(f"{status_icon} **{ar.agent_role}**")
@@ -213,15 +209,9 @@ st.subheader("Filter Findings")
 all_findings_items = report.feedback_items
 
 # Collect unique values for filter options
-all_severities = sorted(
-    {item.finding.severity.value for item in all_findings_items}
-)
-all_categories = sorted(
-    {item.finding.category.value for item in all_findings_items}
-)
-all_agents = sorted(
-    {item.finding.agent_role for item in all_findings_items}
-)
+all_severities = sorted({item.finding.severity.value for item in all_findings_items})
+all_categories = sorted({item.finding.category.value for item in all_findings_items})
+all_agents = sorted({item.finding.agent_role for item in all_findings_items})
 
 # MED-U6: Wrap filters in a form so changing a single dropdown doesn't
 # trigger an immediate full-page rerun.  The user clicks "Apply Filters"
@@ -337,8 +327,7 @@ else:
                     st.markdown(f"**Location:** `{finding.segment_id}`")
                 if item.conflicts_with:
                     st.warning(
-                        f"Conflicts with item(s): "
-                        f"{', '.join(f'#{n}' for n in item.conflicts_with)}"
+                        f"Conflicts with item(s): {', '.join(f'#{n}' for n in item.conflicts_with)}"
                     )
 
             if finding.segment_text:

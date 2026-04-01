@@ -72,6 +72,10 @@ line-length = 100
 select = ["E", "F", "I", "N", "W", "UP", "S", "B", "A", "C4", "PT"]
 ignore = ["S101"]
 
+[tool.ruff.lint.per-file-ignores]
+"streamlit_app/pages/*.py" = ["N999", "E402"]
+"tests/**/*.py" = ["S105"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

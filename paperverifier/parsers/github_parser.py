@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -23,7 +22,6 @@ from paperverifier.security.input_validator import (
     validate_github_url,
 )
 from paperverifier.security.sandbox import (
-    SandboxError,
     cleanup_temp_dir,
     clone_github_repo,
 )
@@ -69,9 +67,7 @@ class GitHubParser(BaseParser):
             RuntimeError: If no paper file is found in the repository.
         """
         if not isinstance(source, str):
-            raise InputValidationError(
-                "GitHub parser requires a URL string as source."
-            )
+            raise InputValidationError("GitHub parser requires a URL string as source.")
 
         # Validate the GitHub URL.
         validated_url = validate_github_url(source)
@@ -102,9 +98,7 @@ class GitHubParser(BaseParser):
             result.source_type = "github"
             result.source_path = validated_url
             result.metadata["github_url"] = validated_url
-            result.metadata["paper_file"] = str(
-                paper_path.relative_to(clone_dir)
-            )
+            result.metadata["paper_file"] = str(paper_path.relative_to(clone_dir))
 
             return result
 
@@ -119,9 +113,7 @@ class GitHubParser(BaseParser):
     # Paper identification
     # ------------------------------------------------------------------
 
-    async def _identify_paper(
-        self, clone_dir: Path
-    ) -> tuple[Path, BaseParser]:
+    async def _identify_paper(self, clone_dir: Path) -> tuple[Path, BaseParser]:
         """Identify the paper file and return the appropriate parser.
 
         Returns:
@@ -147,15 +139,11 @@ class GitHubParser(BaseParser):
         tex_files = list(clone_dir.rglob("*.tex"))
         for tex_file in tex_files:
             try:
-                content = tex_file.read_text(
-                    encoding="utf-8", errors="replace"
-                )
+                content = tex_file.read_text(encoding="utf-8", errors="replace")
                 if r"\documentclass" in content:
                     from paperverifier.parsers.latex_parser import LaTeXParser
 
-                    logger.debug(
-                        "tex_documentclass_found", file=str(tex_file)
-                    )
+                    logger.debug("tex_documentclass_found", file=str(tex_file))
                     return tex_file, LaTeXParser()
             except OSError:
                 continue
@@ -176,9 +164,7 @@ class GitHubParser(BaseParser):
 
         # Strategy 5: Markdown files (non-README or large README).
         md_files = list(clone_dir.rglob("*.md"))
-        non_readme_md = [
-            f for f in md_files if not f.name.lower().startswith("readme")
-        ]
+        non_readme_md = [f for f in md_files if not f.name.lower().startswith("readme")]
         if non_readme_md:
             from paperverifier.parsers.markdown_parser import MarkdownParser
 
@@ -188,9 +174,7 @@ class GitHubParser(BaseParser):
         for md in md_files:
             if md.name.lower().startswith("readme"):
                 try:
-                    content = md.read_text(
-                        encoding="utf-8", errors="replace"
-                    )
+                    content = md.read_text(encoding="utf-8", errors="replace")
                     word_count = len(content.split())
                     if word_count > _README_MIN_WORDS:
                         from paperverifier.parsers.markdown_parser import (
@@ -209,9 +193,9 @@ class GitHubParser(BaseParser):
         # Strategy 6: .txt files.
         txt_files = list(clone_dir.rglob("*.txt"))
         txt_files = [
-            f for f in txt_files
-            if not f.name.lower().startswith("license")
-            and not f.name.lower().startswith("readme")
+            f
+            for f in txt_files
+            if not f.name.lower().startswith("license") and not f.name.lower().startswith("readme")
         ]
         if txt_files:
             from paperverifier.parsers.text_parser import TextParser
@@ -219,18 +203,16 @@ class GitHubParser(BaseParser):
             return txt_files[0], TextParser()
 
         raise RuntimeError(
-            f"No paper file found in repository. "
-            f"Searched for: .tex, .pdf, .md, .txt files. "
-            f"Consider adding a .paperverifier.yml config to specify the paper file."
+            "No paper file found in repository. "
+            "Searched for: .tex, .pdf, .md, .txt files. "
+            "Consider adding a .paperverifier.yml config to specify the paper file."
         )
 
     # ------------------------------------------------------------------
     # Config file parsing
     # ------------------------------------------------------------------
 
-    def _check_config(
-        self, clone_dir: Path
-    ) -> tuple[Path, BaseParser] | None:
+    def _check_config(self, clone_dir: Path) -> tuple[Path, BaseParser] | None:
         """Check for a ``.paperverifier.yml`` config file.
 
         Expected format::

@@ -18,7 +18,7 @@ from __future__ import annotations
 FINDING_JSON_SCHEMA = """
 Each finding must be a JSON object with these fields:
 {
-  "category": "structure|claim|reference|results|novelty|language|hallucination|consistency|cross_reference|general",
+  "category": "structure|claim|reference|results|novelty|language|hallucination|...",
   "severity": "critical|major|minor|info",
   "title": "Short description of the issue",
   "description": "Detailed explanation",

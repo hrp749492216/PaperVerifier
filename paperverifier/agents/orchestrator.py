@@ -134,6 +134,7 @@ class AgentOrchestrator:
         # Wrap the entire pipeline in a global timeout to prevent
         # unbounded execution (R4/17 from enterprise review).
         from paperverifier.config import get_settings
+
         pipeline_timeout = getattr(get_settings(), "pipeline_timeout", None)
         if pipeline_timeout:
             return await asyncio.wait_for(
@@ -167,7 +168,8 @@ class AgentOrchestrator:
 
         # Step 2: Run all agents in parallel
         agent_reports = await self._run_all_agents(
-            agents_with_kwargs, document,
+            agents_with_kwargs,
+            document,
         )
 
         # Step 3: Run orchestrator synthesis
@@ -176,7 +178,10 @@ class AgentOrchestrator:
         # Step 4: Build the final report
         duration = time.monotonic() - pipeline_start
         report = self._build_report(
-            document, agent_reports, consolidated_findings, duration,
+            document,
+            agent_reports,
+            consolidated_findings,
+            duration,
         )
 
         self._logger.info(
@@ -317,7 +322,9 @@ class AgentOrchestrator:
                     await self._progress_callback(agent.role.value, "running")
                 except Exception:  # noqa: BLE001, S110
                     self._logger.debug(
-                        "progress_callback_failed", agent=agent.role.value, phase="start",
+                        "progress_callback_failed",
+                        agent=agent.role.value,
+                        phase="start",
                     )
 
             report = await agent.analyze(document, **kwargs)
@@ -327,7 +334,9 @@ class AgentOrchestrator:
                     await self._progress_callback(agent.role.value, report.status)
                 except Exception:  # noqa: BLE001, S110
                     self._logger.debug(
-                        "progress_callback_failed", agent=agent.role.value, phase="complete",
+                        "progress_callback_failed",
+                        agent=agent.role.value,
+                        phase="complete",
                     )
 
             return report
@@ -394,14 +403,10 @@ class AgentOrchestrator:
         safe_findings = escape_xml_content(findings_text)
 
         wrapped_summary = (
-            "<untrusted_document_summary>\n"
-            + safe_summary + "\n"
-            "</untrusted_document_summary>"
+            "<untrusted_document_summary>\n" + safe_summary + "\n</untrusted_document_summary>"
         )
         wrapped_findings = (
-            "<untrusted_agent_findings>\n"
-            + safe_findings + "\n"
-            "</untrusted_agent_findings>"
+            "<untrusted_agent_findings>\n" + safe_findings + "\n</untrusted_agent_findings>"
         )
 
         user_msg = user_template.format(
@@ -484,12 +489,8 @@ class AgentOrchestrator:
     ) -> VerificationReport:
         """Build the final :class:`VerificationReport`."""
         # Aggregate token usage
-        total_input = sum(
-            r.tokens_used.get("input_tokens", 0) for r in agent_reports
-        )
-        total_output = sum(
-            r.tokens_used.get("output_tokens", 0) for r in agent_reports
-        )
+        total_input = sum(r.tokens_used.get("input_tokens", 0) for r in agent_reports)
+        total_output = sum(r.tokens_used.get("output_tokens", 0) for r in agent_reports)
 
         # Count completed agents
         completed = sum(1 for r in agent_reports if r.status == "completed")
@@ -551,13 +552,11 @@ class AgentOrchestrator:
                 parts.append(f"Breakdown: {', '.join(severity_parts)}.")
 
         failed_agents = [
-            r.agent_role for r in report.agent_reports
-            if r.status in ("failed", "disabled")
+            r.agent_role for r in report.agent_reports if r.status in ("failed", "disabled")
         ]
         if failed_agents:
             parts.append(
-                f"Warning: {len(failed_agents)} agent(s) failed: "
-                f"{', '.join(failed_agents)}."
+                f"Warning: {len(failed_agents)} agent(s) failed: {', '.join(failed_agents)}."
             )
 
         return " ".join(parts)

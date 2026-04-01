@@ -8,14 +8,14 @@ sensible defaults that can be overridden through the YAML config store.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 from paperverifier.llm.providers import LLMProvider
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     """Roles played by verification agents."""
 
     ORCHESTRATOR = "orchestrator"

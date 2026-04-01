@@ -89,7 +89,9 @@ class TestChunkDocumentLarge:
         # Budget = (8192 - 4000) * 0.70 = ~2934 tokens = ~11736 chars.
         section_text = "This is a long paragraph. " * 300  # ~7800 chars
         sections = [
-            _make_section("sec-1", "Section One", section_text, start_char=0, end_char=len(section_text)),
+            _make_section(
+                "sec-1", "Section One", section_text, start_char=0, end_char=len(section_text)
+            ),
             _make_section(
                 "sec-2",
                 "Section Two",

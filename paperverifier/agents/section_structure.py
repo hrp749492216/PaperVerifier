@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from paperverifier.agents.base import BaseAgent
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument, Section
@@ -20,8 +21,6 @@ from paperverifier.utils.chunking import (
     create_document_summary,
 )
 from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -52,16 +51,17 @@ def _format_section_line(
         num = f"{prefix}{i}" if prefix else str(i)
         para_count = len(sec.paragraphs)
         sent_count = sum(len(p.sentences) for p in sec.paragraphs)
-        word_count = sum(
-            len(p.raw_text.split()) for p in sec.paragraphs
-        )
+        word_count = sum(len(p.raw_text.split()) for p in sec.paragraphs)
         lines.append(
             f"{indent}{num}. [{sec.id}] {sec.title} "
             f"({para_count} paragraphs, {sent_count} sentences, ~{word_count} words)"
         )
         if sec.subsections:
             _format_section_line(
-                sec.subsections, lines, depth + 1, prefix=f"{num}.",
+                sec.subsections,
+                lines,
+                depth + 1,
+                prefix=f"{num}.",
             )
 
 

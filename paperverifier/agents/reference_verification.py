@@ -7,19 +7,16 @@ into a confidence tier: verified, likely_valid, unverified, or suspicious.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import structlog
 
+from paperverifier.agents.base import BaseAgent
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument, Reference
+from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import ConfidenceLevel, Finding
-from paperverifier.utils.chunking import create_document_summary
 from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -162,7 +159,8 @@ class ReferenceVerificationAgent(BaseAgent):
         system_prompt, user_template = get_prompts("reference_verification")
 
         references_text, api_text = _format_references_with_status(
-            document, api_results,
+            document,
+            api_results,
         )
 
         # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).

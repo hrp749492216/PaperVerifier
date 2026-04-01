@@ -12,14 +12,13 @@ from typing import Any
 
 import structlog
 
+from paperverifier.agents.base import BaseAgent
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.utils.json_parser import JSONParseError, parse_llm_json
 from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.agents.base import BaseAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -162,8 +161,7 @@ class WriterAgent(BaseAgent):
     def _build_instruction(self, finding: Finding) -> str:
         """Build a clear instruction for the writer based on the finding."""
         instruction = (
-            f"Fix the {finding.severity.value} {finding.category.value} issue: "
-            f"{finding.title}. "
+            f"Fix the {finding.severity.value} {finding.category.value} issue: {finding.title}. "
         )
         if finding.suggestion:
             instruction += f"The suggested approach is: {finding.suggestion}. "

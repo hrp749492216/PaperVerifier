@@ -83,9 +83,7 @@ class URLParser(BaseParser):
                 content type is unsupported.
         """
         if not isinstance(source, str):
-            raise InputValidationError(
-                "URL parser requires a URL string as source."
-            )
+            raise InputValidationError("URL parser requires a URL string as source.")
 
         url = source.strip()
 
@@ -97,9 +95,7 @@ class URLParser(BaseParser):
         validated_url, resolved_ip = resolve_and_validate_url(url)
 
         # Download the content using the pinned IP.
-        content, content_type, final_url = await self._download(
-            validated_url, resolved_ip
-        )
+        content, content_type, final_url = await self._download(validated_url, resolved_ip)
 
         # Determine the parser to use.
         parser_type = self._detect_parser_type(content_type, final_url, content)
@@ -150,9 +146,7 @@ class URLParser(BaseParser):
     # Download
     # ------------------------------------------------------------------
 
-    async def _download(
-        self, url: str, resolved_ip: str
-    ) -> tuple[bytes, str, str]:
+    async def _download(self, url: str, resolved_ip: str) -> tuple[bytes, str, str]:
         """Download content from a URL with size limits and timeout.
 
         Args:
@@ -182,15 +176,9 @@ class URLParser(BaseParser):
             current_ip = resolved_ip
             max_redirects = 5
             for _ in range(max_redirects + 1):
-                connector = self._make_pinned_connector(
-                    current_url, current_ip
-                )
-                async with aiohttp.ClientSession(
-                    timeout=timeout, connector=connector
-                ) as session:
-                    async with session.get(
-                        current_url, allow_redirects=False
-                    ) as response:
+                connector = self._make_pinned_connector(current_url, current_ip)
+                async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+                    async with session.get(current_url, allow_redirects=False) as response:
                         if response.status in (301, 302, 303, 307, 308):
                             location = response.headers.get("Location")
                             if not location:
@@ -198,14 +186,10 @@ class URLParser(BaseParser):
                                     f"Redirect with no Location header from: {current_url}"
                                 )
                             # Resolve relative redirects.
-                            location = urllib.parse.urljoin(
-                                current_url, location
-                            )
+                            location = urllib.parse.urljoin(current_url, location)
                             # Re-validate the redirect target for SSRF
                             # and pin the new resolved IP.
-                            current_url, current_ip = (
-                                resolve_and_validate_url(location)
-                            )
+                            current_url, current_ip = resolve_and_validate_url(location)
                             continue
 
                         if response.status != 200:
@@ -227,14 +211,11 @@ class URLParser(BaseParser):
                         # Read with size limit.
                         chunks: list[bytes] = []
                         total_size = 0
-                        async for chunk in response.content.iter_chunked(
-                            8192
-                        ):
+                        async for chunk in response.content.iter_chunked(8192):
                             total_size += len(chunk)
                             if total_size > _MAX_DOWNLOAD_SIZE:
                                 raise InputValidationError(
-                                    f"Download exceeded size limit of "
-                                    f"{_MAX_DOWNLOAD_SIZE:,} bytes."
+                                    f"Download exceeded size limit of {_MAX_DOWNLOAD_SIZE:,} bytes."
                                 )
                             chunks.append(chunk)
 
@@ -247,28 +228,22 @@ class URLParser(BaseParser):
                         )
                         return content, content_type, final_url
             else:
-                raise InputValidationError(
-                    f"Too many redirects (>{max_redirects}) from: {url}"
-                )
+                raise InputValidationError(f"Too many redirects (>{max_redirects}) from: {url}")
 
         except InputValidationError:
             raise
         except Exception as exc:
-            raise InputValidationError(
-                f"Failed to download URL: {url} -- {exc}"
-            ) from exc
+            raise InputValidationError(f"Failed to download URL: {url} -- {exc}") from exc
 
-    async def _download_httpx(
-        self, url: str, resolved_ip: str
-    ) -> tuple[bytes, str, str]:
+    async def _download_httpx(self, url: str, resolved_ip: str) -> tuple[bytes, str, str]:
         """Fallback download using httpx with DNS pinning."""
         try:
             import httpx  # type: ignore[import-untyped]
-        except ImportError:
+        except ImportError as err:
             raise RuntimeError(
                 "Either aiohttp or httpx is required for URL downloads. "
                 "Install with: pip install aiohttp  or  pip install httpx"
-            )
+            ) from err
 
         try:
             transport = self._make_pinned_httpx_transport(url, resolved_ip)
@@ -291,13 +266,9 @@ class URLParser(BaseParser):
                                 f"Redirect with no Location header from: {current_url}"
                             )
                         location = urllib.parse.urljoin(current_url, location)
-                        current_url, current_ip = resolve_and_validate_url(
-                            location
-                        )
+                        current_url, current_ip = resolve_and_validate_url(location)
                         # Create a fresh client with the new pinned IP.
-                        transport = self._make_pinned_httpx_transport(
-                            current_url, current_ip
-                        )
+                        transport = self._make_pinned_httpx_transport(current_url, current_ip)
                         async with httpx.AsyncClient(
                             follow_redirects=False,
                             timeout=_DOWNLOAD_TIMEOUT,
@@ -307,9 +278,7 @@ class URLParser(BaseParser):
                         continue
                     break
                 else:
-                    raise InputValidationError(
-                        f"Too many redirects (>{max_redirects}) from: {url}"
-                    )
+                    raise InputValidationError(f"Too many redirects (>{max_redirects}) from: {url}")
 
                 if response.status_code != 200:
                     raise InputValidationError(
@@ -325,8 +294,7 @@ class URLParser(BaseParser):
                         cl_int = 0
                     if cl_int > _MAX_DOWNLOAD_SIZE:
                         raise InputValidationError(
-                            f"File too large: {cl_int:,} bytes "
-                            f"(max {_MAX_DOWNLOAD_SIZE:,})."
+                            f"File too large: {cl_int:,} bytes (max {_MAX_DOWNLOAD_SIZE:,})."
                         )
 
                 content_type = response.headers.get("content-type", "")
@@ -336,8 +304,7 @@ class URLParser(BaseParser):
                 content = response.content
                 if len(content) > _MAX_DOWNLOAD_SIZE:
                     raise InputValidationError(
-                        f"Download exceeded size limit of "
-                        f"{_MAX_DOWNLOAD_SIZE:,} bytes."
+                        f"Download exceeded size limit of {_MAX_DOWNLOAD_SIZE:,} bytes."
                     )
 
                 logger.info(
@@ -351,18 +318,14 @@ class URLParser(BaseParser):
         except InputValidationError:
             raise
         except Exception as exc:
-            raise InputValidationError(
-                f"Failed to download URL: {url} -- {exc}"
-            ) from exc
+            raise InputValidationError(f"Failed to download URL: {url} -- {exc}") from exc
 
     # ------------------------------------------------------------------
     # DNS-pinning helpers
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_pinned_connector(
-        url: str, resolved_ip: str
-    ) -> Any:
+    def _make_pinned_connector(url: str, resolved_ip: str) -> Any:
         """Create an aiohttp ``TCPConnector`` that pins DNS resolution.
 
         The connector uses a custom resolver that always returns the
@@ -398,8 +361,7 @@ class URLParser(BaseParser):
                 # For any other host (should not happen), fall back to
                 # standard resolution -- but this path is unexpected.
                 raise OSError(
-                    f"DNS resolution blocked: unexpected host '{host}' "
-                    f"(expected '{pinned_host}')"
+                    f"DNS resolution blocked: unexpected host '{host}' (expected '{pinned_host}')"
                 )
 
             async def close(self) -> None:
@@ -408,9 +370,7 @@ class URLParser(BaseParser):
         return aiohttp.TCPConnector(resolver=_PinnedResolver())
 
     @staticmethod
-    def _make_pinned_httpx_transport(
-        url: str, resolved_ip: str
-    ) -> Any:
+    def _make_pinned_httpx_transport(url: str, resolved_ip: str) -> Any:
         """Create an httpx transport that pins DNS to the validated IP.
 
         Uses httpx's ``transport`` parameter with a custom map so the
@@ -509,12 +469,14 @@ class URLParser(BaseParser):
             return "pdf"
         if content[:2] == b"PK":
             # Verify it's actually a DOCX (not just any ZIP file).
-            import zipfile, io
+            import io
+            import zipfile
+
             try:
                 with zipfile.ZipFile(io.BytesIO(content)) as zf:
                     if "word/document.xml" in zf.namelist():
                         return "docx"
-            except (zipfile.BadZipFile, Exception):
+            except (zipfile.BadZipFile, Exception):  # noqa: S110
                 pass  # Not a valid ZIP or not a DOCX.
 
         # Last resort: if it looks like text, use text parser.
@@ -533,9 +495,7 @@ class URLParser(BaseParser):
             return True
         except UnicodeDecodeError:
             # Check if mostly printable ASCII.
-            printable = sum(
-                1 for b in sample if 32 <= b <= 126 or b in (9, 10, 13)
-            )
+            printable = sum(1 for b in sample if 32 <= b <= 126 or b in (9, 10, 13))
             return printable / len(sample) > 0.85
 
     # ------------------------------------------------------------------

@@ -64,8 +64,7 @@ class PDFParser(BaseParser):
             # Raw bytes -- validate size.
             if len(source) > _MAX_PDF_SIZE:
                 raise InputValidationError(
-                    f"PDF file too large: {len(source):,} bytes "
-                    f"(max {_MAX_PDF_SIZE:,})."
+                    f"PDF file too large: {len(source):,} bytes (max {_MAX_PDF_SIZE:,})."
                 )
             if len(source) == 0:
                 raise InputValidationError("PDF file is empty.")
@@ -81,8 +80,7 @@ class PDFParser(BaseParser):
                 raise InputValidationError(f"PDF file not found: {source}")
             if path.stat().st_size > _MAX_PDF_SIZE:
                 raise InputValidationError(
-                    f"PDF file too large: {path.stat().st_size:,} bytes "
-                    f"(max {_MAX_PDF_SIZE:,})."
+                    f"PDF file too large: {path.stat().st_size:,} bytes (max {_MAX_PDF_SIZE:,})."
                 )
             pdf_bytes = path.read_bytes()
             source_path = str(path)
@@ -103,8 +101,7 @@ class PDFParser(BaseParser):
                 import pdfplumber  # noqa: F401,PLC0415
             except ImportError as exc:
                 raise RuntimeError(
-                    "pdfplumber is required for PDF parsing. "
-                    "Install with: pip install pdfplumber"
+                    "pdfplumber is required for PDF parsing. Install with: pip install pdfplumber"
                 ) from exc
             # pdfplumber is installed but extraction failed.
             raise InputValidationError(
@@ -132,11 +129,7 @@ class PDFParser(BaseParser):
         # Extract title and abstract heuristically.
         title = metadata.get("title") or self._guess_title(text)
         authors_raw = metadata.get("author", "")
-        authors = (
-            [a.strip() for a in authors_raw.split(",") if a.strip()]
-            if authors_raw
-            else []
-        )
+        authors = [a.strip() for a in authors_raw.split(",") if a.strip()] if authors_raw else []
         abstract = self._extract_abstract(text)
 
         return ParsedDocument(
@@ -156,9 +149,7 @@ class PDFParser(BaseParser):
     # pdfplumber extraction (primary engine)
     # ------------------------------------------------------------------
 
-    def _try_pdfplumber(
-        self, pdf_bytes: bytes
-    ) -> tuple[str | None, list[Section], dict[str, Any]]:
+    def _try_pdfplumber(self, pdf_bytes: bytes) -> tuple[str | None, list[Section], dict[str, Any]]:
         """Attempt extraction using pdfplumber.
 
         Returns ``(full_text, sections, metadata)`` or ``(None, [], {})``
@@ -193,6 +184,7 @@ class PDFParser(BaseParser):
 
             # Enforce page limit (MED-S4).
             from paperverifier.config import get_settings
+
             max_pages = get_settings().max_document_pages
             pages_to_process = pdf.pages[:max_pages]
             if len(pdf.pages) > max_pages:

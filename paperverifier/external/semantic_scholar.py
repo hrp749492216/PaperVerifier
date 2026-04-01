@@ -37,9 +37,7 @@ _DEFAULT_PAPER_FIELDS: str = (
     "authors,venue,publicationDate,tldr"
 )
 
-_DEFAULT_CITATION_FIELDS: str = (
-    "paperId,title,year,authors,venue,citationCount,externalIds"
-)
+_DEFAULT_CITATION_FIELDS: str = "paperId,title,year,authors,venue,citationCount,externalIds"
 
 
 class SemanticScholarClient:
@@ -72,15 +70,19 @@ class SemanticScholarClient:
             self._rate_limiter = rate_limiter
         elif api_key:
             self._rate_limiter = AsyncRateLimiter(
-                max_concurrent=10, requests_per_second=50.0,
+                max_concurrent=10,
+                requests_per_second=50.0,
             )
         else:
             self._rate_limiter = AsyncRateLimiter(
-                max_concurrent=3, requests_per_second=5.0,
+                max_concurrent=3,
+                requests_per_second=5.0,
             )
 
         self._circuit_breaker = CircuitBreaker(
-            failure_threshold=3, recovery_timeout=60.0, name="semantic_scholar",
+            failure_threshold=3,
+            recovery_timeout=60.0,
+            name="semantic_scholar",
         )
         self._timeout = aiohttp.ClientTimeout(total=timeout)
         self._session: aiohttp.ClientSession | None = None
@@ -94,7 +96,7 @@ class SemanticScholarClient:
             logger.warning(
                 "s2_client_not_closed",
                 hint="SemanticScholarClient was garbage-collected without "
-                     "calling close(). Use 'async with' to avoid connection leaks.",
+                "calling close(). Use 'async with' to avoid connection leaks.",
             )
             # Cannot await in __del__; schedule close on the running loop.
             try:
@@ -125,7 +127,8 @@ class SemanticScholarClient:
                 if self._api_key:
                     headers["x-api-key"] = self._api_key
                 self._session = aiohttp.ClientSession(
-                    headers=headers, timeout=self._timeout,
+                    headers=headers,
+                    timeout=self._timeout,
                 )
             return self._session
 
@@ -172,7 +175,7 @@ class SemanticScholarClient:
                     data: dict[str, Any] = await resp.json(content_type=None)
                     await self._circuit_breaker.record_success()
                     return data
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("s2_timeout", endpoint=endpoint)
                 await self._circuit_breaker.record_failure()
                 return None
@@ -268,7 +271,9 @@ class SemanticScholarClient:
             if "citingPaper" in entry and entry["citingPaper"].get("paperId")
         ]
         logger.debug(
-            "s2_citations", paper_id=paper_id, count=len(citations),
+            "s2_citations",
+            paper_id=paper_id,
+            count=len(citations),
         )
         return citations
 
@@ -307,7 +312,9 @@ class SemanticScholarClient:
             if "citedPaper" in entry and entry["citedPaper"].get("paperId")
         ]
         logger.debug(
-            "s2_references", paper_id=paper_id, count=len(references),
+            "s2_references",
+            paper_id=paper_id,
+            count=len(references),
         )
         return references
 

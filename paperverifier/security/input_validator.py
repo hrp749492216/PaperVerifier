@@ -42,10 +42,10 @@ BLOCKED_IP_RANGES = [
     ipaddress.ip_network("fe80::/10"),  # Link-local IPv6
     ipaddress.ip_network("::ffff:0:0/96"),  # IPv4-mapped IPv6 (HIGH-S2)
     ipaddress.ip_network("100.64.0.0/10"),  # Carrier-grade NAT
-    ipaddress.ip_network("::/128"),          # Unspecified IPv6
-    ipaddress.ip_network("2001:db8::/32"),   # Documentation range
-    ipaddress.ip_network("ff00::/8"),        # Multicast
-    ipaddress.ip_network("2002::/16"),       # 6to4 (can tunnel to internal)
+    ipaddress.ip_network("::/128"),  # Unspecified IPv6
+    ipaddress.ip_network("2001:db8::/32"),  # Documentation range
+    ipaddress.ip_network("ff00::/8"),  # Multicast
+    ipaddress.ip_network("2002::/16"),  # 6to4 (can tunnel to internal)
 ]
 
 # Magic bytes for file-type verification.
@@ -56,9 +56,7 @@ MAGIC_BYTES: dict[str, bytes] = {
 }
 
 # GitHub URL must be exactly https://github.com/{owner}/{repo}.
-GITHUB_URL_PATTERN = re.compile(
-    r"^https://github\.com/[\w\-\.]+/[\w\-\.]+/?$"
-)
+GITHUB_URL_PATTERN = re.compile(r"^https://github\.com/[\w\-\.]+/[\w\-\.]+/?$")
 
 # Characters allowed in sanitized filenames.
 _SAFE_FILENAME_RE = re.compile(r"[^a-zA-Z0-9\-_\.]")
@@ -71,6 +69,7 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class InputValidationError(Exception):
     """Raised when any input fails validation."""
 
@@ -78,6 +77,7 @@ class InputValidationError(Exception):
 # ---------------------------------------------------------------------------
 # URL validation
 # ---------------------------------------------------------------------------
+
 
 def validate_url(url: str) -> str:
     """Validate a URL for SSRF protection.
@@ -222,7 +222,9 @@ def _check_hostname_ip(hostname: str) -> None:
         _assert_ip_not_blocked(addr, hostname)
 
 
-def _assert_ip_not_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address, hostname: str) -> None:
+def _assert_ip_not_blocked(
+    addr: ipaddress.IPv4Address | ipaddress.IPv6Address, hostname: str
+) -> None:
     """Raise if *addr* falls in any blocked range."""
     # Unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254) to their
     # IPv4 equivalents so they are checked against IPv4 blocklists (HIGH-S2).
@@ -242,6 +244,7 @@ def _assert_ip_not_blocked(addr: ipaddress.IPv4Address | ipaddress.IPv6Address, 
 # ---------------------------------------------------------------------------
 # GitHub URL validation
 # ---------------------------------------------------------------------------
+
 
 def validate_github_url(url: str) -> str:
     """Validate a GitHub repository URL.
@@ -288,6 +291,7 @@ def validate_github_url(url: str) -> str:
 # File upload validation
 # ---------------------------------------------------------------------------
 
+
 def validate_uploaded_file(
     filename: str,
     content: bytes,
@@ -308,8 +312,7 @@ def validate_uploaded_file(
     # -- Size --
     if len(content) > max_size:
         raise InputValidationError(
-            f"File too large: {len(content):,} bytes exceeds "
-            f"maximum of {max_size:,} bytes."
+            f"File too large: {len(content):,} bytes exceeds maximum of {max_size:,} bytes."
         )
 
     if len(content) == 0:
@@ -322,8 +325,7 @@ def validate_uploaded_file(
     ext = Path(safe_name).suffix.lower()
     if ext not in ALLOWED_FILE_EXTENSIONS:
         raise InputValidationError(
-            f"File extension '{ext}' is not allowed. "
-            f"Permitted: {sorted(ALLOWED_FILE_EXTENSIONS)}"
+            f"File extension '{ext}' is not allowed. Permitted: {sorted(ALLOWED_FILE_EXTENSIONS)}"
         )
 
     # -- Magic bytes --
@@ -392,6 +394,7 @@ def sanitize_filename(filename: str) -> str:
 # Path traversal protection
 # ---------------------------------------------------------------------------
 
+
 def validate_file_path(path: Path, allowed_dir: Path) -> Path:
     """Validate that *path* is within *allowed_dir*.
 
@@ -418,7 +421,7 @@ def validate_file_path(path: Path, allowed_dir: Path) -> Path:
     # Check containment.
     try:
         resolved_path.relative_to(resolved_dir)
-    except ValueError:
+    except ValueError as err:
         logger.warning(
             "path_traversal_blocked",
             path=str(path),
@@ -428,14 +431,14 @@ def validate_file_path(path: Path, allowed_dir: Path) -> Path:
         raise InputValidationError(
             f"Path '{path}' resolves to '{resolved_path}', which is outside "
             f"the allowed directory '{resolved_dir}'."
-        )
+        ) from err
 
     # Symlink target check (if the file already exists).
     if path.is_symlink():
         link_target = path.resolve(strict=False)
         try:
             link_target.relative_to(resolved_dir)
-        except ValueError:
+        except ValueError as err:
             logger.warning(
                 "symlink_traversal_blocked",
                 path=str(path),
@@ -445,7 +448,7 @@ def validate_file_path(path: Path, allowed_dir: Path) -> Path:
             raise InputValidationError(
                 f"Symlink '{path}' points to '{link_target}', which is outside "
                 f"the allowed directory '{resolved_dir}'."
-            )
+            ) from err
 
     logger.debug("path_validated", path=str(resolved_path))
     return resolved_path
@@ -454,6 +457,7 @@ def validate_file_path(path: Path, allowed_dir: Path) -> Path:
 # ---------------------------------------------------------------------------
 # Magic byte verification
 # ---------------------------------------------------------------------------
+
 
 def verify_magic_bytes(content: bytes, extension: str) -> bool:
     """Check that the first bytes of *content* match the expected signature

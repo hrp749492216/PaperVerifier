@@ -24,6 +24,7 @@ logger = structlog.get_logger(__name__)
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class JSONParseError(Exception):
     """Raised when all JSON parsing strategies have been exhausted."""
 
@@ -31,6 +32,7 @@ class JSONParseError(Exception):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def parse_llm_json(
     raw: str,
@@ -139,6 +141,7 @@ def parse_llm_json(
 # ---------------------------------------------------------------------------
 # Strategy helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_code_fences(text: str) -> str:
     """Remove markdown code fence wrappers.
@@ -274,6 +277,7 @@ def _fix_truncated_json(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal utilities
 # ---------------------------------------------------------------------------
+
 
 def _try_parse(text: str, strategy: str, errors: list[str]) -> Any | None:
     """Attempt ``json.loads`` and record failures."""

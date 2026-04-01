@@ -174,17 +174,19 @@ def get_settings() -> AppSettings:
 # ---------------------------------------------------------------------------
 
 #: Keys that must never appear in log output (redacted at the processor level).
-_SENSITIVE_KEYS: frozenset[str] = frozenset({
-    "api_key",
-    "api_secret",
-    "password",
-    "token",
-    "secret",
-    "authorization",
-    "semantic_scholar_api_key",
-    "paper_content",
-    "document_text",
-})
+_SENSITIVE_KEYS: frozenset[str] = frozenset(
+    {
+        "api_key",
+        "api_secret",
+        "password",
+        "token",
+        "secret",
+        "authorization",
+        "semantic_scholar_api_key",
+        "paper_content",
+        "document_text",
+    }
+)
 
 
 def _redact_sensitive_keys(
@@ -201,7 +203,16 @@ def _redact_sensitive_keys(
         key_lower = key.lower()
         if key_lower in _SENSITIVE_KEYS or any(
             fragment in key_lower
-            for fragment in ("secret", "password", "api_key", "authorization", "access_token", "refresh_token", "auth_token", "bearer_token")
+            for fragment in (
+                "secret",
+                "password",
+                "api_key",
+                "authorization",
+                "access_token",
+                "refresh_token",
+                "auth_token",
+                "bearer_token",
+            )
         ):
             # Do NOT match "token" as a substring -- it would redact
             # "input_tokens" and "output_tokens" metrics (HIGH-I4).

@@ -11,7 +11,6 @@ import re
 import string
 import unicodedata
 
-
 # ---------------------------------------------------------------------------
 # DOI extraction
 # ---------------------------------------------------------------------------
@@ -141,9 +140,7 @@ def add_line_numbers(text: str) -> str:
     """
     lines = text.splitlines()
     width = len(str(len(lines))) if lines else 1
-    return "\n".join(
-        f"{i + 1:>{width}} | {line}" for i, line in enumerate(lines)
-    )
+    return "\n".join(f"{i + 1:>{width}} | {line}" for i, line in enumerate(lines))
 
 
 # ---------------------------------------------------------------------------

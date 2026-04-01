@@ -111,9 +111,7 @@ class LaTeXParser(BaseParser):
 
         if isinstance(source, bytes):
             text = source.decode("utf-8", errors="replace")
-        elif isinstance(source, str) and (
-            "\\" in source and ("{" in source or "begin" in source)
-        ):
+        elif isinstance(source, str) and ("\\" in source and ("{" in source or "begin" in source)):
             # Looks like raw LaTeX, not a path.
             text = source
         else:
@@ -152,9 +150,7 @@ class LaTeXParser(BaseParser):
     # Direct regex parsing (primary strategy)
     # ------------------------------------------------------------------
 
-    def _parse_latex_direct(
-        self, text: str, source_path: str
-    ) -> ParsedDocument | None:
+    def _parse_latex_direct(self, text: str, source_path: str) -> ParsedDocument | None:
         """Parse LaTeX using regex-based extraction."""
         # Extract metadata.
         title = self._extract_latex_field(_TITLE_RE, text)
@@ -235,11 +231,7 @@ class LaTeXParser(BaseParser):
 
             # Section body extends to the next section command.
             body_start = match.end()
-            body_end = (
-                matches[idx + 1].start()
-                if idx + 1 < len(matches)
-                else len(body)
-            )
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
             section_body = body[body_start:body_end].strip()
             cleaned = self._clean_latex(section_body)
 
@@ -455,9 +447,7 @@ class LaTeXParser(BaseParser):
     # pypandoc fallback
     # ------------------------------------------------------------------
 
-    def _try_pypandoc(
-        self, text: str, source_path: str
-    ) -> ParsedDocument | None:
+    def _try_pypandoc(self, text: str, source_path: str) -> ParsedDocument | None:
         """Try to convert LaTeX to plain text using pypandoc.
 
         Returns ``None`` if pypandoc or pandoc is not available.
@@ -532,9 +522,7 @@ class LaTeXParser(BaseParser):
     # Plain text fallback
     # ------------------------------------------------------------------
 
-    def _parse_as_plain(
-        self, text: str, source_path: str
-    ) -> ParsedDocument:
+    def _parse_as_plain(self, text: str, source_path: str) -> ParsedDocument:
         """Last-resort fallback: clean and wrap as a single section."""
         cleaned = self._clean_latex(text)
 

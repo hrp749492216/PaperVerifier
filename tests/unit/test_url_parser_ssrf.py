@@ -32,9 +32,7 @@ class TestURLParserSSRFRedirect:
 
         parser = URLParser()
 
-        with patch(
-            "paperverifier.parsers.url_parser.resolve_and_validate_url"
-        ) as mock_resolve:
+        with patch("paperverifier.parsers.url_parser.resolve_and_validate_url") as mock_resolve:
             mock_resolve.return_value = ("https://example.com/paper.pdf", "93.184.216.34")
 
             mock_response = MagicMock()
@@ -52,8 +50,10 @@ class TestURLParserSSRFRedirect:
             mock_session = MagicMock()
             mock_session.get = MagicMock(return_value=_AsyncContextManager(mock_response))
 
-            with patch("aiohttp.ClientTimeout", return_value=MagicMock()), \
-                 patch("aiohttp.ClientSession", return_value=_AsyncContextManager(mock_session)):
+            with (
+                patch("aiohttp.ClientTimeout", return_value=MagicMock()),
+                patch("aiohttp.ClientSession", return_value=_AsyncContextManager(mock_session)),
+            ):
                 # Mock the delegate parser so we don't need a real PDF parser
                 mock_delegate = AsyncMock()
                 mock_parsed_doc = MagicMock()
@@ -92,7 +92,9 @@ class TestURLParserSSRFRedirect:
             mock_session = MagicMock()
             mock_session.get = MagicMock(return_value=_AsyncContextManager(mock_response))
 
-            with patch("aiohttp.ClientTimeout", return_value=MagicMock()), \
-                 patch("aiohttp.ClientSession", return_value=_AsyncContextManager(mock_session)):
+            with (
+                patch("aiohttp.ClientTimeout", return_value=MagicMock()),
+                patch("aiohttp.ClientSession", return_value=_AsyncContextManager(mock_session)),
+            ):
                 with pytest.raises(InputValidationError, match="private|blocked|reserved"):
-                    await parser._download("https://example.com/paper.pdf")
+                    await parser._download("https://example.com/paper.pdf", "93.184.216.34")

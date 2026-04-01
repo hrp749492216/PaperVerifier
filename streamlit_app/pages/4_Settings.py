@@ -17,15 +17,14 @@ require_auth()
 # Imports
 # ---------------------------------------------------------------------------
 
-from paperverifier.llm.providers import LLMProvider, PROVIDER_REGISTRY
-from paperverifier.llm.roles import AgentRole, RoleAssignment, DEFAULT_ASSIGNMENTS
 from paperverifier.llm.config_store import (
-    get_api_key,
-    store_api_key,
+    list_configured_providers,
     load_role_assignments,
     save_role_assignments,
-    list_configured_providers,
+    store_api_key,
 )
+from paperverifier.llm.providers import PROVIDER_REGISTRY, LLMProvider
+from paperverifier.llm.roles import DEFAULT_ASSIGNMENTS, AgentRole, RoleAssignment
 
 # ---------------------------------------------------------------------------
 # Page header
@@ -71,7 +70,10 @@ for provider in LLMProvider:
 
         # API key input
         if is_configured:
-            st.caption("\U0001f511 A key is already saved in your keyring. Enter a new value below only to replace it.")
+            st.caption(
+                "\U0001f511 A key is already saved in your keyring."
+                " Enter a new value below only to replace it."
+            )
 
         # If the previous run flagged this key for clearing, remove the
         # widget-backed value from session state *before* creating the
@@ -85,7 +87,11 @@ for provider in LLMProvider:
             type="password",
             value="",
             key=f"api_key_{provider.value}",
-            placeholder="Enter API key..." if not is_configured else "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (key is set -- enter new to update)",
+            placeholder=(
+                "Enter API key..."
+                if not is_configured
+                else "\u2022" * 8 + " (key is set -- enter new to update)"
+            ),
             help=f"Set via keyring or ${spec.env_var} environment variable.",
         )
 
@@ -103,10 +109,13 @@ for provider in LLMProvider:
                         # Flag the widget key for clearing on next rerun
                         # (cannot mutate widget-backed state after creation).
                         st.session_state[_clear_flag] = True
-                        st.toast(f"API key for {spec.display_name} saved to keyring.", icon="\u2705")
+                        st.toast(
+                            f"API key for {spec.display_name} saved to keyring.", icon="\u2705"
+                        )
                         st.rerun()
                     except Exception:
                         import logging as _logging
+
                         _logging.getLogger(__name__).error("save_key_failed", exc_info=True)
                         st.error("Failed to save key. Check logs for details.")
                 else:
@@ -116,8 +125,7 @@ for provider in LLMProvider:
             if st.button("Test Connection", key=f"btn_test_{provider.value}"):
                 if not is_configured and not key_input.strip():
                     st.warning(
-                        f"No API key configured for {spec.display_name}. "
-                        "Please save a key first."
+                        f"No API key configured for {spec.display_name}. Please save a key first."
                     )
                 else:
                     with st.spinner(f"Testing {spec.display_name} connection..."):
@@ -129,24 +137,24 @@ for provider in LLMProvider:
                             # memory only -- do NOT persist to keyring (Codex-2).
                             if key_input.strip():
                                 test_client.set_api_key(
-                                    provider, key_input.strip(), persist=False,
+                                    provider,
+                                    key_input.strip(),
+                                    persist=False,
                                 )
 
-                            success = run_async(
-                                test_client.test_connection(provider)
-                            )
+                            success = run_async(test_client.test_connection(provider))
                             if success:
-                                st.success(
-                                    f"Connection to {spec.display_name} successful!"
-                                )
+                                st.success(f"Connection to {spec.display_name} successful!")
                             else:
                                 st.error(
-                                    f"Connection to {spec.display_name} failed. "
-                                    "Check your API key."
+                                    f"Connection to {spec.display_name} failed. Check your API key."
                                 )
                         except Exception:
                             import logging as _logging
-                            _logging.getLogger(__name__).error("connection_test_failed", exc_info=True)
+
+                            _logging.getLogger(__name__).error(
+                                "connection_test_failed", exc_info=True
+                            )
                             st.error("Connection test failed. Check logs for details.")
 
         # Status indicator
@@ -157,9 +165,7 @@ for provider in LLMProvider:
 
             env_val = os.environ.get(spec.env_var)
             if env_val:
-                st.caption(
-                    f"\u2705 Key found in environment variable ${spec.env_var}"
-                )
+                st.caption(f"\u2705 Key found in environment variable ${spec.env_var}")
             else:
                 st.caption("\u274c No key configured")
 
@@ -280,6 +286,7 @@ with save_col:
             st.success("Role assignments saved to configuration file.")
         except Exception:
             import logging as _logging
+
             _logging.getLogger(__name__).error("save_config_failed", exc_info=True)
             st.error("Failed to save configuration. Check logs for details.")
 
@@ -292,6 +299,7 @@ with reset_col:
             st.rerun()
         except Exception:
             import logging as _logging
+
             _logging.getLogger(__name__).error("reset_config_failed", exc_info=True)
             st.error("Failed to reset configuration. Check logs for details.")
 

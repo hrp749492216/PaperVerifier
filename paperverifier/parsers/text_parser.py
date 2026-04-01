@@ -128,11 +128,7 @@ class TextParser(BaseParser):
         for idx, match in enumerate(matches):
             heading = match.group(1).strip()
             body_start = match.end()
-            body_end = (
-                matches[idx + 1].start()
-                if idx + 1 < len(matches)
-                else len(text)
-            )
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
             body = text[body_start:body_end].strip()
 
             section_id = f"sec-{idx + 1}"
@@ -165,11 +161,7 @@ class TextParser(BaseParser):
             level = 1 if underline_char == "=" else 2
 
             body_start = match.end()
-            body_end = (
-                matches[idx + 1].start()
-                if idx + 1 < len(matches)
-                else len(text)
-            )
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
             body = text[body_start:body_end].strip()
 
             section_id = f"sec-{idx + 1}"
@@ -208,11 +200,7 @@ class TextParser(BaseParser):
         for idx, match in enumerate(matches):
             heading = match.group(1).strip()
             body_start = match.end()
-            body_end = (
-                matches[idx + 1].start()
-                if idx + 1 < len(matches)
-                else len(text)
-            )
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
             body = text[body_start:body_end].strip()
 
             section_id = f"sec-{idx + 1}"

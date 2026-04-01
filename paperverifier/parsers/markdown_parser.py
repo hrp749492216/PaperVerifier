@@ -83,8 +83,10 @@ class MarkdownParser(BaseParser):
 
         # Extract metadata fields.
         raw_title = metadata.get("title")
-        title = raw_title if isinstance(raw_title, str) and raw_title.strip() else (
-            sections[0].title if sections else None
+        title = (
+            raw_title
+            if isinstance(raw_title, str) and raw_title.strip()
+            else (sections[0].title if sections else None)
         )
         authors_raw = metadata.get("author") or metadata.get("authors", "")
         if isinstance(authors_raw, list):
@@ -129,7 +131,7 @@ class MarkdownParser(BaseParser):
             return {}, text
 
         fm_raw = fm_match.group(1)
-        remaining = text[fm_match.end():]
+        remaining = text[fm_match.end() :]
 
         try:
             meta = yaml.safe_load(fm_raw)
@@ -207,9 +209,7 @@ class MarkdownParser(BaseParser):
         for idx, (start, end, title, level) in enumerate(headings):
             # Section body extends to the next heading.
             body_start = end
-            body_end = (
-                headings[idx + 1][0] if idx + 1 < len(headings) else len(text)
-            )
+            body_end = headings[idx + 1][0] if idx + 1 < len(headings) else len(text)
             body = text[body_start:body_end].strip()
 
             sec_num = len(sections) + 1

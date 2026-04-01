@@ -29,22 +29,59 @@ logger = structlog.get_logger(__name__)
 
 # Abbreviations that should NOT trigger sentence boundaries.
 _ABBREVIATIONS = {
-    "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc",
-    "fig", "figs", "eq", "eqs", "ref", "refs", "vol", "no", "pp",
-    "ed", "eds", "al", "e.g", "i.e", "viz", "approx", "dept",
-    "assn", "bros", "inc", "ltd", "co", "corp", "jan", "feb", "mar",
-    "apr", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    "dr",
+    "mr",
+    "mrs",
+    "ms",
+    "prof",
+    "sr",
+    "jr",
+    "st",
+    "vs",
+    "etc",
+    "fig",
+    "figs",
+    "eq",
+    "eqs",
+    "ref",
+    "refs",
+    "vol",
+    "no",
+    "pp",
+    "ed",
+    "eds",
+    "al",
+    "e.g",
+    "i.e",
+    "viz",
+    "approx",
+    "dept",
+    "assn",
+    "bros",
+    "inc",
+    "ltd",
+    "co",
+    "corp",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
 }
 
 # Simple sentence boundary: sentence-ending punctuation followed by
 # whitespace and an uppercase letter or quotation mark.
-_SENTENCE_BOUNDARY_RE = re.compile(
-    r'[.!?](?=\s+[A-Z"\'\(\[])'
-)
+_SENTENCE_BOUNDARY_RE = re.compile(r'[.!?](?=\s+[A-Z"\'\(\[])')
 
 # Pattern to extract the word immediately before a period (for abbreviation
 # checking).
-_WORD_BEFORE_DOT_RE = re.compile(r'(\b\w+)\.$')
+_WORD_BEFORE_DOT_RE = re.compile(r"(\b\w+)\.$")
 
 
 class BaseParser(ABC):
@@ -106,8 +143,10 @@ class BaseParser(ABC):
                         continue
 
                 # Check for single-capital initial (e.g. "J." in "J. K. Rowling").
-                if len(prefix) >= 1 and prefix[-1:].isupper() and (
-                    len(prefix) < 2 or not prefix[-2].isalpha()
+                if (
+                    len(prefix) >= 1
+                    and prefix[-1:].isupper()
+                    and (len(prefix) < 2 or not prefix[-2].isalpha())
                 ):
                     continue
 
@@ -205,7 +244,8 @@ class BaseParser(ABC):
                     # Fallback: find in the pre-computed collapsed paragraph.
                     collapsed_sent = re.sub(r"\s+", " ", sent_text)
                     sub_pos = collapsed_para.find(
-                        collapsed_sent, collapsed_search_start,
+                        collapsed_sent,
+                        collapsed_search_start,
                     )
                     if sub_pos != -1 and sub_pos < len(collapsed_to_raw):
                         pos = collapsed_to_raw[sub_pos]
@@ -315,9 +355,7 @@ class BaseParser(ABC):
 
             # Find in-text citations [N] throughout the document.
             cite_pattern = re.compile(r"\[" + re.escape(num) + r"\]")
-            ref.in_text_locations = [
-                f"char-{m.start()}" for m in cite_pattern.finditer(text)
-            ]
+            ref.in_text_locations = [f"char-{m.start()}" for m in cite_pattern.finditer(text)]
 
             refs.append(ref)
         return refs
@@ -352,12 +390,8 @@ class BaseParser(ABC):
                 pass
 
             # Locate all in-text occurrences of this citation.
-            cite_re = re.compile(
-                re.escape(author) + r",?\s*" + re.escape(year_str)
-            )
-            ref.in_text_locations = [
-                f"char-{m.start()}" for m in cite_re.finditer(text)
-            ]
+            cite_re = re.compile(re.escape(author) + r",?\s*" + re.escape(year_str))
+            ref.in_text_locations = [f"char-{m.start()}" for m in cite_re.finditer(text)]
             refs.append(ref)
 
         return refs
@@ -403,7 +437,7 @@ class BaseParser(ABC):
                 text,
             )
         )
-        superscript_count = len(re.findall(r"(?<!\[)\d+(?=\s|,|;|\))", text))
+        len(re.findall(r"(?<!\[)\d+(?=\s|,|;|\))", text))
 
         # Choose the style with the most matches (with sensible thresholds).
         if numbered_count >= 3 and numbered_count >= author_year_count:
@@ -475,16 +509,12 @@ class BaseParser(ABC):
         if ref_type == "figure":
             # Match: Figure N. Caption text... or Figure N: Caption text...
             pattern = re.compile(
-                r"(?:Fig(?:ure|\.)?)\s+"
-                + re.escape(number)
-                + r"[.:\s]+([^\n]+)",
+                r"(?:Fig(?:ure|\.)?)\s+" + re.escape(number) + r"[.:\s]+([^\n]+)",
                 re.IGNORECASE,
             )
         else:
             pattern = re.compile(
-                r"Table\s+"
-                + re.escape(number)
-                + r"[.:\s]+([^\n]+)",
+                r"Table\s+" + re.escape(number) + r"[.:\s]+([^\n]+)",
                 re.IGNORECASE,
             )
 

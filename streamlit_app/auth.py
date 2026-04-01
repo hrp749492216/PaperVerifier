@@ -33,6 +33,7 @@ import streamlit as st
 # Brute-force login throttler
 # ---------------------------------------------------------------------------
 
+
 class _LoginThrottler:
     """Thread-safe in-memory brute-force throttler keyed by session ID.
 
@@ -65,7 +66,7 @@ class _LoginThrottler:
             entries.append(time.monotonic())
             # Keep only the last *max_attempts* entries to bound memory.
             if len(entries) > self.max_attempts:
-                self._failures[session_id] = entries[-self.max_attempts:]
+                self._failures[session_id] = entries[-self.max_attempts :]
 
     def reset(self, session_id: str) -> None:
         """Clear all failure history for *session_id* (e.g. on successful login)."""
@@ -92,6 +93,7 @@ _throttler = _LoginThrottler(max_attempts=5, lockout_seconds=300.0)
 # Session helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_session_id() -> str:
     """Return a stable per-session identifier, creating one if needed."""
     if "_pv_session_id" not in st.session_state:
@@ -102,6 +104,7 @@ def _get_session_id() -> str:
 # ---------------------------------------------------------------------------
 # Core auth helpers
 # ---------------------------------------------------------------------------
+
 
 def _check_password(password: str, expected_hash: str) -> bool:
     """Constant-time comparison of SHA-256 hash of *password* against *expected_hash*."""
@@ -163,10 +166,7 @@ def require_auth() -> None:
     # Check brute-force lockout *before* rendering the login form.
     if _throttler.is_locked(session_id):
         remaining = math.ceil(_throttler.remaining_lockout(session_id))
-        st.error(
-            f"Too many failed login attempts. "
-            f"Please try again in {remaining} seconds."
-        )
+        st.error(f"Too many failed login attempts. Please try again in {remaining} seconds.")
         st.stop()
 
     # Compute expected hash once.
@@ -189,8 +189,7 @@ def require_auth() -> None:
             if _throttler.is_locked(session_id):
                 remaining = math.ceil(_throttler.remaining_lockout(session_id))
                 st.error(
-                    f"Too many failed login attempts. "
-                    f"Please try again in {remaining} seconds."
+                    f"Too many failed login attempts. Please try again in {remaining} seconds."
                 )
             else:
                 st.error("Incorrect password.")

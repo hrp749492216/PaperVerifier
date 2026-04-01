@@ -17,14 +17,14 @@ import sys
 from pathlib import Path
 
 import click
-
-from paperverifier import __version__
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
+
+from paperverifier import __version__
 
 console = Console()
 error_console = Console(stderr=True)
@@ -36,9 +36,9 @@ error_console = Console(stderr=True)
 _SEVERITY_STYLES: dict[str, tuple[str, str]] = {
     # severity -> (badge_text, rich_style)
     "critical": ("[red bold]CRITICAL[/]", "red bold"),
-    "major":    ("[dark_orange]MAJOR[/]",  "dark_orange"),
-    "minor":    ("[yellow]MINOR[/]",       "yellow"),
-    "info":     ("[blue]INFO[/]",          "blue"),
+    "major": ("[dark_orange]MAJOR[/]", "dark_orange"),
+    "minor": ("[yellow]MINOR[/]", "yellow"),
+    "info": ("[blue]INFO[/]", "blue"),
 }
 
 _SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2, "info": 3}
@@ -65,6 +65,7 @@ def _score_color(score: float | None) -> str:
 # CLI group
 # ===================================================================
 
+
 @click.group()
 @click.version_option(version=__version__)
 def cli():
@@ -75,24 +76,34 @@ def cli():
 # verify command
 # ===================================================================
 
+
 @cli.command()
 @click.argument("input_path")
 @click.option("--output", "-o", type=click.Path(), help="Output report path (JSON)")
 @click.option(
-    "--format", "-f", "output_format",
+    "--format",
+    "-f",
+    "output_format",
     type=click.Choice(["json", "markdown", "text"]),
     default="text",
     help="Output format (default: text)",
 )
 @click.option("--agents", "-a", help="Comma-separated agent names to run (default: all)")
 @click.option(
-    "--severity", "-s",
+    "--severity",
+    "-s",
     type=click.Choice(["critical", "major", "minor", "info"]),
     help="Minimum severity to show",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Show detailed output")
-def verify(input_path: str, output: str | None, output_format: str,
-           agents: str | None, severity: str | None, verbose: bool):
+def verify(
+    input_path: str,
+    output: str | None,
+    output_format: str,
+    agents: str | None,
+    severity: str | None,
+    verbose: bool,
+):
     """Verify a research paper.
 
     INPUT_PATH can be a file path, URL, or GitHub repository URL.
@@ -119,27 +130,30 @@ async def _verify(
     # 1. Header
     # ------------------------------------------------------------------
     console.print()
-    console.print(Panel.fit(
-        f"[bold cyan]PaperVerifier[/bold cyan]  [dim]v{__version__}[/dim]\n"
-        "[dim]Enterprise-grade research paper verification[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]PaperVerifier[/bold cyan]  [dim]v{__version__}[/dim]\n"
+            "[dim]Enterprise-grade research paper verification[/dim]",
+            border_style="cyan",
+        )
+    )
     console.print()
 
     # ------------------------------------------------------------------
     # 2. Load configuration and create LLM client
     # ------------------------------------------------------------------
+    from paperverifier.agents.orchestrator import AgentOrchestrator
     from paperverifier.config import get_settings, setup_logging
     from paperverifier.llm.client import UnifiedLLMClient
     from paperverifier.llm.config_store import load_role_assignments
     from paperverifier.llm.roles import AgentRole
     from paperverifier.parsers.router import InputRouter
-    from paperverifier.agents.orchestrator import AgentOrchestrator
 
     settings = get_settings()
     setup_logging(level="DEBUG" if verbose else settings.log_level, fmt="console")
 
     from paperverifier.config import bind_request_id
+
     request_id = bind_request_id()
 
     assignments = load_role_assignments()
@@ -156,10 +170,7 @@ async def _verify(
                 f"Valid agents: {', '.join(sorted(valid_roles))}"
             )
         # Keep only requested roles in assignments
-        assignments = {
-            role: assn for role, assn in assignments.items()
-            if role.value in requested
-        }
+        assignments = {role: assn for role, assn in assignments.items() if role.value in requested}
 
     # ------------------------------------------------------------------
     # 3. Parse document
@@ -179,7 +190,9 @@ async def _verify(
             error_console.print(f"[red]Error:[/] File not found: {input_path}")
             sys.exit(1)
         except Exception as exc:
-            error_console.print(f"[red]Error parsing document:[/] {exc}  [dim](request_id={request_id})[/dim]")
+            error_console.print(
+                f"[red]Error parsing document:[/] {exc}  [dim](request_id={request_id})[/dim]"
+            )
             if verbose:
                 console.print_exception()
             sys.exit(1)
@@ -229,7 +242,8 @@ async def _verify(
         transient=True,
     ) as progress:
         enrich_task = progress.add_task(
-            description="Looking up references via external APIs...", total=None,
+            description="Looking up references via external APIs...",
+            total=None,
         )
         try:
             from paperverifier.external.enrichment import enrich_document
@@ -239,9 +253,7 @@ async def _verify(
         except Exception as exc:
             progress.update(enrich_task, visible=False)
             if verbose:
-                error_console.print(
-                    f"[yellow]External enrichment failed (non-fatal):[/] {exc}"
-                )
+                error_console.print(f"[yellow]External enrichment failed (non-fatal):[/] {exc}")
 
     with Progress(
         SpinnerColumn(),
@@ -249,13 +261,16 @@ async def _verify(
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task(
-            description="Running verification agents...", total=None,
+        progress.add_task(
+            description="Running verification agents...",
+            total=None,
         )
         try:
             report = await orchestrator.verify(document, external_data=external_data)
         except Exception as exc:
-            error_console.print(f"[red]Verification failed:[/] {exc}  [dim](request_id={request_id})[/dim]")
+            error_console.print(
+                f"[red]Verification failed:[/] {exc}  [dim](request_id={request_id})[/dim]"
+            )
             if verbose:
                 console.print_exception()
             sys.exit(1)
@@ -312,15 +327,15 @@ async def _verify(
                 output_path.write_text(report.to_json(), encoding="utf-8")
             elif output_format == "markdown":
                 output_path.write_text(
-                    _report_to_markdown(report), encoding="utf-8",
+                    _report_to_markdown(report),
+                    encoding="utf-8",
                 )
             else:
                 output_path.write_text(
-                    _report_to_text(report), encoding="utf-8",
+                    _report_to_text(report),
+                    encoding="utf-8",
                 )
-            console.print(
-                f"[green]Report saved to:[/green] {output_path.resolve()}"
-            )
+            console.print(f"[green]Report saved to:[/green] {output_path.resolve()}")
         except OSError as exc:
             error_console.print(f"[red]Failed to save report:[/] {exc}")
             sys.exit(1)
@@ -330,18 +345,24 @@ async def _verify(
 # apply command
 # ===================================================================
 
+
 @cli.command()
 @click.argument("input_path")
 @click.argument("report_path", type=click.Path(exists=True))
-@click.option("--items", "-i", required=True,
-              help="Comma-separated item numbers to apply (e.g., 1,3,5-8)")
+@click.option(
+    "--items", "-i", required=True, help="Comma-separated item numbers to apply (e.g., 1,3,5-8)"
+)
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
-@click.option("--diff", "show_diff", is_flag=True,
-              help="Show diff instead of writing output")
-@click.option("--force", is_flag=True, default=False,
-              help="Force apply even when conflicting items are detected")
-def apply(input_path: str, report_path: str, items: str,
-          output: str | None, show_diff: bool, force: bool):
+@click.option("--diff", "show_diff", is_flag=True, help="Show diff instead of writing output")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force apply even when conflicting items are detected",
+)
+def apply(
+    input_path: str, report_path: str, items: str, output: str | None, show_diff: bool, force: bool
+):
     """Apply selected feedback items to a paper.
 
     \b
@@ -363,17 +384,19 @@ async def _apply(
 ) -> None:
     from paperverifier.feedback.applier import FeedbackApplier, FeedbackConflictError
     from paperverifier.feedback.diff_generator import DiffGenerator
-    from paperverifier.models.report import VerificationReport
-    from paperverifier.parsers.router import InputRouter
     from paperverifier.llm.client import UnifiedLLMClient
     from paperverifier.llm.config_store import load_role_assignments
     from paperverifier.llm.roles import AgentRole
+    from paperverifier.models.report import VerificationReport
+    from paperverifier.parsers.router import InputRouter
 
     console.print()
-    console.print(Panel.fit(
-        "[bold cyan]PaperVerifier[/bold cyan]  [dim]Feedback Applier[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]PaperVerifier[/bold cyan]  [dim]Feedback Applier[/dim]",
+            border_style="cyan",
+        )
+    )
     console.print()
 
     # ------------------------------------------------------------------
@@ -398,9 +421,7 @@ async def _apply(
         error_console.print(f"[red]Failed to load report:[/] {exc}")
         sys.exit(1)
 
-    console.print(
-        f"[dim]Loaded report with {len(report.feedback_items)} feedback items[/dim]"
-    )
+    console.print(f"[dim]Loaded report with {len(report.feedback_items)} feedback items[/dim]")
 
     # ------------------------------------------------------------------
     # 3. Parse the document
@@ -441,7 +462,10 @@ async def _apply(
         progress.add_task(description="Applying feedback...", total=None)
         try:
             result = await applier.apply(
-                document, report, selected_items, force=force,
+                document,
+                report,
+                selected_items,
+                force=force,
             )
         except FeedbackConflictError as exc:
             error_console.print(f"[red]Conflict detected:[/] {exc}")
@@ -460,7 +484,9 @@ async def _apply(
     summary_table.add_row("Skipped:", f"[yellow]{len(result.skipped_items)}[/yellow]")
     if result.errors:
         summary_table.add_row("Errors:", f"[red]{len(result.errors)}[/red]")
-    console.print(Panel(summary_table, title="[bold]Application Summary[/bold]", border_style="green"))
+    console.print(
+        Panel(summary_table, title="[bold]Application Summary[/bold]", border_style="green")
+    )
     console.print()
 
     # Show errors/warnings
@@ -479,18 +505,20 @@ async def _apply(
             filename=Path(input_path).name,
         )
         if diff_text:
-            console.print(Panel(
-                Syntax(diff_text, "diff", theme="monokai", line_numbers=False),
-                title="[bold]Diff[/bold]",
-                border_style="cyan",
-            ))
+            console.print(
+                Panel(
+                    Syntax(diff_text, "diff", theme="monokai", line_numbers=False),
+                    title="[bold]Diff[/bold]",
+                    border_style="cyan",
+                )
+            )
         else:
             console.print("[dim]No changes were made.[/dim]")
     elif output:
         output_path = Path(output)
         # Only text-based output formats are supported (Codex-2).
-        _UNSUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".odt", ".rtf"}
-        if output_path.suffix.lower() in _UNSUPPORTED_EXTENSIONS:
+        unsupported_extensions = {".pdf", ".docx", ".doc", ".odt", ".rtf"}
+        if output_path.suffix.lower() in unsupported_extensions:
             error_console.print(
                 f"[red]Error:[/] Output format '{output_path.suffix}' is not supported. "
                 "Only text-based formats (.txt, .md, .tex) are currently supported "
@@ -513,6 +541,7 @@ async def _apply(
 # config command
 # ===================================================================
 
+
 @cli.command()
 def config():
     """Configure LLM providers and API keys.
@@ -520,22 +549,23 @@ def config():
     Interactive setup for API keys and role assignments.
     API keys are stored securely in your OS keyring.
     """
-    from paperverifier.llm.providers import LLMProvider, PROVIDER_REGISTRY
+    from paperverifier.llm.client import UnifiedLLMClient
     from paperverifier.llm.config_store import (
         get_api_key,
-        store_api_key,
-        load_role_assignments,
-        save_role_assignments,
         list_configured_providers,
+        load_role_assignments,
+        store_api_key,
     )
-    from paperverifier.llm.roles import AgentRole, DEFAULT_ASSIGNMENTS
-    from paperverifier.llm.client import UnifiedLLMClient
+    from paperverifier.llm.providers import PROVIDER_REGISTRY, LLMProvider
+    from paperverifier.llm.roles import AgentRole
 
     console.print()
-    console.print(Panel.fit(
-        "[bold cyan]PaperVerifier[/bold cyan]  [dim]Configuration[/dim]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]PaperVerifier[/bold cyan]  [dim]Configuration[/dim]",
+            border_style="cyan",
+        )
+    )
     console.print()
 
     # ------------------------------------------------------------------
@@ -616,7 +646,7 @@ def config():
                 if api_key.strip():
                     try:
                         store_api_key(provider, api_key.strip())
-                        console.print(f"  [green]API key saved to keyring.[/green]")
+                        console.print("  [green]API key saved to keyring.[/green]")
                     except Exception as exc:
                         error_console.print(f"  [red]Failed to store key:[/] {exc}")
                 else:
@@ -702,6 +732,7 @@ def config():
 # Display helpers
 # ===================================================================
 
+
 def _parse_item_numbers(items_str: str) -> list[int]:
     """Parse item number string like '1,3,5-8,10' into [1,3,5,6,7,8,10].
 
@@ -723,13 +754,9 @@ def _parse_item_numbers(items_str: str) -> list[int]:
             except ValueError:
                 raise ValueError(f"Invalid range: '{part}'") from None
             if start > end:
-                raise ValueError(
-                    f"Invalid range: '{part}' (start > end)"
-                )
+                raise ValueError(f"Invalid range: '{part}' (start > end)")
             if end - start > 10_000:
-                raise ValueError(
-                    f"Range too large: '{part}' (max 10,000 items)"
-                )
+                raise ValueError(f"Range too large: '{part}' (max 10,000 items)")
             result.extend(range(start, end + 1))
         else:
             try:
@@ -748,15 +775,11 @@ def _display_findings(
     Filters by minimum severity when specified and renders a numbered
     table with colored severity badges.
     """
-    from paperverifier.models.findings import Finding
 
     # Filter by severity if requested
     if min_severity:
         threshold = _SEVERITY_ORDER.get(min_severity, 3)
-        findings = [
-            f for f in findings
-            if _SEVERITY_ORDER.get(f.severity.value, 3) <= threshold
-        ]
+        findings = [f for f in findings if _SEVERITY_ORDER.get(f.severity.value, 3) <= threshold]
 
     if not findings:
         console.print("[dim]No findings at the selected severity level.[/dim]")
@@ -817,17 +840,18 @@ def _display_findings(
                 detail_lines.append(f"  - {escape(ev)}")
 
         _, style = _SEVERITY_STYLES.get(sev, ("[dim]UNKNOWN[/]", "dim"))
-        console.print(Panel(
-            "\n".join(detail_lines),
-            title=header,
-            border_style=style,
-            padding=(0, 1),
-        ))
+        console.print(
+            Panel(
+                "\n".join(detail_lines),
+                title=header,
+                border_style=style,
+                padding=(0, 1),
+            )
+        )
 
 
 def _display_report_summary(report) -> None:
     """Display a summary panel with overall score and stats."""
-    from paperverifier.models.report import VerificationReport
 
     # Build score display
     score = report.overall_score
@@ -859,12 +883,14 @@ def _display_report_summary(report) -> None:
     )
     grid.add_row("Duration:", f"{report.duration_seconds:.1f}s")
 
-    console.print(Panel(
-        grid,
-        title="[bold]Verification Results[/bold]",
-        border_style="green" if report.total_findings == 0 else "yellow",
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            grid,
+            title="[bold]Verification Results[/bold]",
+            border_style="green" if report.total_findings == 0 else "yellow",
+            padding=(1, 2),
+        )
+    )
 
 
 def _display_agent_status(report) -> None:
@@ -914,17 +940,16 @@ def _display_agent_status(report) -> None:
 # Report serialisation helpers
 # ===================================================================
 
+
 def _report_to_markdown(report) -> str:
     """Convert a VerificationReport to Markdown text."""
     lines: list[str] = []
-    lines.append(f"# PaperVerifier Report")
+    lines.append("# PaperVerifier Report")
     lines.append("")
     if report.document_title:
         lines.append(f"**Document:** {report.document_title}")
     lines.append(f"**Date:** {report.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    lines.append(
-        f"**Agents:** {report.agents_completed}/{report.agents_total} completed"
-    )
+    lines.append(f"**Agents:** {report.agents_completed}/{report.agents_total} completed")
     lines.append(f"**Duration:** {report.duration_seconds:.1f}s")
     lines.append("")
 
@@ -977,8 +1002,7 @@ def _report_to_markdown(report) -> str:
     lines.append("|-------|--------|----------|-------|----------|")
     for ar in report.agent_reports:
         lines.append(
-            f"| {ar.agent_role} | {ar.status} | {ar.provider} "
-            f"| {ar.model} | {len(ar.findings)} |"
+            f"| {ar.agent_role} | {ar.status} | {ar.provider} | {ar.model} | {len(ar.findings)} |"
         )
     lines.append("")
 
@@ -994,12 +1018,8 @@ def _report_to_text(report) -> str:
     lines.append("")
     if report.document_title:
         lines.append(f"Document:  {report.document_title}")
-    lines.append(
-        f"Date:      {report.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-    )
-    lines.append(
-        f"Agents:    {report.agents_completed}/{report.agents_total} completed"
-    )
+    lines.append(f"Date:      {report.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    lines.append(f"Agents:    {report.agents_completed}/{report.agents_total} completed")
     lines.append(f"Duration:  {report.duration_seconds:.1f}s")
     if report.overall_score is not None:
         lines.append(f"Score:     {report.overall_score:.1f}/10")
@@ -1024,9 +1044,7 @@ def _report_to_text(report) -> str:
         lines.append(f"FINDINGS ({len(all_findings)})")
         lines.append("-" * 70)
         for idx, finding in enumerate(all_findings, start=1):
-            lines.append(
-                f"\n  #{idx}  [{finding.severity.value.upper()}] {finding.title}"
-            )
+            lines.append(f"\n  #{idx}  [{finding.severity.value.upper()}] {finding.title}")
             lines.append(f"       Category: {finding.category.value}")
             lines.append(f"       Agent:    {finding.agent_role}")
             if finding.segment_id:
@@ -1056,6 +1074,7 @@ def _report_to_text(report) -> str:
 # ===================================================================
 # Entry point
 # ===================================================================
+
 
 def main() -> None:
     """Entry point for ``python -m paperverifier`` or console_scripts."""

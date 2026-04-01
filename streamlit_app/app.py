@@ -97,7 +97,9 @@ with st.sidebar:
 
     # Data-processing notice
     st.subheader("Settings")
-    st.page_link("streamlit_app/pages/4_Settings.py", label="LLM Configuration", icon="\u2699\ufe0f")
+    st.page_link(
+        "streamlit_app/pages/4_Settings.py", label="LLM Configuration", icon="\u2699\ufe0f"
+    )
 
     st.divider()
     st.info(
@@ -153,10 +155,22 @@ st.header("Verification Agents")
 
 agents_info = [
     ("Section Structure", "Checks heading hierarchy, logical flow, and completeness."),
-    ("Claim Verification", "Validates claims against cited evidence and detects unsupported assertions."),
-    ("Reference Verification", "Cross-checks references against OpenAlex, Crossref, and Semantic Scholar."),
-    ("Hallucination Detection", "Identifies fabricated data, invented citations, and factual inconsistencies."),
-    ("Results Consistency", "Verifies that numbers, tables, and figures agree with textual descriptions."),
+    (
+        "Claim Verification",
+        "Validates claims against cited evidence and detects unsupported assertions.",
+    ),
+    (
+        "Reference Verification",
+        "Cross-checks references against OpenAlex, Crossref, and Semantic Scholar.",
+    ),
+    (
+        "Hallucination Detection",
+        "Identifies fabricated data, invented citations, and factual inconsistencies.",
+    ),
+    (
+        "Results Consistency",
+        "Verifies that numbers, tables, and figures agree with textual descriptions.",
+    ),
     ("Novelty Assessment", "Evaluates the paper's contribution relative to existing literature."),
     ("Language & Flow", "Analyses grammar, readability, and overall writing quality."),
 ]
@@ -172,8 +186,14 @@ st.divider()
 # Supported providers
 st.header("Supported LLM Providers")
 providers_list = [
-    "Anthropic (Claude)", "OpenAI (GPT-4o)", "Grok", "OpenRouter",
-    "Gemini", "MiniMax", "Kimi", "DeepSeek",
+    "Anthropic (Claude)",
+    "OpenAI (GPT-4o)",
+    "Grok",
+    "OpenRouter",
+    "Gemini",
+    "MiniMax",
+    "Kimi",
+    "DeepSeek",
 ]
 st.markdown(" | ".join(f"**{p}**" for p in providers_list))
 

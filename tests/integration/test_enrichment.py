@@ -18,6 +18,7 @@ from paperverifier.models.document import ParsedDocument, Reference
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_document(
     title: str = "Test Paper",
     references: list[Reference] | None = None,
@@ -68,6 +69,7 @@ def _default_s2() -> AsyncMock:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_enrichment_returns_expected_keys():

@@ -13,7 +13,6 @@ the correct parser.  Detection order:
 from __future__ import annotations
 
 import re
-import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 
@@ -65,37 +64,49 @@ def register_parser(name: str, factory: Callable[[], BaseParser]) -> None:
 
 def _register_builtin_parsers() -> None:
     """Register the built-in parsers with deferred imports."""
+
     def _pdf() -> BaseParser:
         from paperverifier.parsers.pdf_parser import PDFParser
+
         return PDFParser()
 
     def _docx() -> BaseParser:
         from paperverifier.parsers.docx_parser import DOCXParser
+
         return DOCXParser()
 
     def _markdown() -> BaseParser:
         from paperverifier.parsers.markdown_parser import MarkdownParser
+
         return MarkdownParser()
 
     def _latex() -> BaseParser:
         from paperverifier.parsers.latex_parser import LaTeXParser
+
         return LaTeXParser()
 
     def _github() -> BaseParser:
         from paperverifier.parsers.github_parser import GitHubParser
+
         return GitHubParser()
 
     def _url() -> BaseParser:
         from paperverifier.parsers.url_parser import URLParser
+
         return URLParser()
 
     def _text() -> BaseParser:
         from paperverifier.parsers.text_parser import TextParser
+
         return TextParser()
 
     for name, factory in [
-        ("pdf", _pdf), ("docx", _docx), ("markdown", _markdown),
-        ("latex", _latex), ("github", _github), ("url", _url),
+        ("pdf", _pdf),
+        ("docx", _docx),
+        ("markdown", _markdown),
+        ("latex", _latex),
+        ("github", _github),
+        ("url", _url),
         ("text", _text),
     ]:
         register_parser(name, factory)
@@ -212,7 +223,9 @@ class InputRouter:
             return "pdf"
         if content[:2] == b"PK":
             # Verify it's actually a DOCX (not just any ZIP file).
-            import zipfile, io
+            import io
+            import zipfile
+
             try:
                 with zipfile.ZipFile(io.BytesIO(content)) as zf:
                     if "word/document.xml" in zf.namelist():

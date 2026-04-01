@@ -11,32 +11,49 @@ from typing import Any
 
 import structlog
 
+from paperverifier.agents.base import BaseAgent
 from paperverifier.llm.client import Message, UnifiedLLMClient
 from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument, Section
 from paperverifier.models.findings import Finding
-from paperverifier.utils.chunking import create_document_summary, get_context_window
-from paperverifier.utils.text import count_tokens_estimate, truncate_to_token_limit
+from paperverifier.utils.chunking import get_context_window
 from paperverifier.utils.prompts import get_prompts
-
-from paperverifier.agents.base import BaseAgent
+from paperverifier.utils.text import count_tokens_estimate, truncate_to_token_limit
 
 logger = structlog.get_logger(__name__)
 
 # Keywords used to identify methodology, results, and conclusion sections
 _METHODOLOGY_KEYWORDS = {
-    "method", "methods", "methodology", "approach",
-    "experimental setup", "experimental design", "materials and methods",
-    "data collection", "procedure", "implementation",
+    "method",
+    "methods",
+    "methodology",
+    "approach",
+    "experimental setup",
+    "experimental design",
+    "materials and methods",
+    "data collection",
+    "procedure",
+    "implementation",
 }
 _RESULTS_KEYWORDS = {
-    "result", "results", "experiment", "experiments",
-    "evaluation", "findings", "analysis", "performance",
+    "result",
+    "results",
+    "experiment",
+    "experiments",
+    "evaluation",
+    "findings",
+    "analysis",
+    "performance",
 }
 _CONCLUSION_KEYWORDS = {
-    "conclusion", "conclusions", "discussion",
-    "discussion and conclusion", "summary", "summary and conclusion",
-    "concluding remarks", "future work",
+    "conclusion",
+    "conclusions",
+    "discussion",
+    "discussion and conclusion",
+    "summary",
+    "summary and conclusion",
+    "concluding remarks",
+    "future work",
 }
 
 
@@ -124,13 +141,16 @@ class ResultsConsistencyAgent(BaseAgent):
 
         # Extract methodology, results, and conclusion sections
         method_sections = _find_sections_by_keywords(
-            document, _METHODOLOGY_KEYWORDS,
+            document,
+            _METHODOLOGY_KEYWORDS,
         )
         results_sections = _find_sections_by_keywords(
-            document, _RESULTS_KEYWORDS,
+            document,
+            _RESULTS_KEYWORDS,
         )
         conclusion_sections = _find_sections_by_keywords(
-            document, _CONCLUSION_KEYWORDS,
+            document,
+            _CONCLUSION_KEYWORDS,
         )
 
         methodology_text = _extract_section_text(document, method_sections)
@@ -147,9 +167,7 @@ class ResultsConsistencyAgent(BaseAgent):
         # Guard against context overflow: if the combined section text
         # is too large for the model, truncate each section proportionally
         # (Codex-2).
-        combined_tokens = count_tokens_estimate(
-            methodology_text + results_text + conclusion_text
-        )
+        combined_tokens = count_tokens_estimate(methodology_text + results_text + conclusion_text)
         context_window = get_context_window(self._assignment.model)
         # Reserve tokens for system prompt, user template, and response.
         max_section_tokens = (context_window - 4_000) // 3
@@ -160,13 +178,16 @@ class ResultsConsistencyAgent(BaseAgent):
                 max_per_section=max_section_tokens,
             )
             methodology_text = truncate_to_token_limit(
-                methodology_text, max_section_tokens,
+                methodology_text,
+                max_section_tokens,
             )
             results_text = truncate_to_token_limit(
-                results_text, max_section_tokens,
+                results_text,
+                max_section_tokens,
             )
             conclusion_text = truncate_to_token_limit(
-                conclusion_text, max_section_tokens,
+                conclusion_text,
+                max_section_tokens,
             )
 
         # Escape curly braces to avoid crashes on LaTeX/code (CRIT-1).

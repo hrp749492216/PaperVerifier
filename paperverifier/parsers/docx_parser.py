@@ -61,8 +61,7 @@ class DOCXParser(BaseParser):
             import docx  # type: ignore[import-untyped]
         except ImportError as exc:
             raise RuntimeError(
-                "python-docx is required for DOCX parsing. "
-                "Install it with: pip install python-docx"
+                "python-docx is required for DOCX parsing. Install it with: pip install python-docx"
             ) from exc
 
         source_path = ""
@@ -233,8 +232,12 @@ class DOCXParser(BaseParser):
         # Don't forget the last section.
         if current_paragraphs:
             section_data.append(
-                (current_heading, current_level, current_paragraphs,
-                 current_section_start if current_section_start is not None else char_cursor)
+                (
+                    current_heading,
+                    current_level,
+                    current_paragraphs,
+                    current_section_start if current_section_start is not None else char_cursor,
+                )
             )
 
         full_text = "\n\n".join(full_text_parts)

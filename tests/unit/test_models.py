@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from paperverifier.models import (
     AgentReport,
-    FeedbackItem,
     Finding,
     FindingCategory,
     ParsedDocument,
-    Section,
     Severity,
     VerificationReport,
 )
-
 
 # ---------------------------------------------------------------------------
 # ParsedDocument

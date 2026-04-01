@@ -7,24 +7,21 @@ circuit breaker, synthesis, and report building.
 
 from __future__ import annotations
 
-import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from paperverifier.agents.orchestrator import AgentOrchestrator, _AGENT_CLASSES
-from paperverifier.llm.client import LLMResponse, Message, UnifiedLLMClient
+from paperverifier.agents.orchestrator import AgentOrchestrator
+from paperverifier.llm.client import LLMResponse, UnifiedLLMClient
 from paperverifier.llm.providers import LLMProvider
 from paperverifier.llm.roles import AgentRole, RoleAssignment
-from paperverifier.models.document import ParsedDocument, Section, Paragraph, Sentence
-from paperverifier.models.findings import Finding, FindingCategory, Severity
-from paperverifier.models.report import AgentReport
-
+from paperverifier.models.document import Paragraph, ParsedDocument, Section, Sentence
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_assignment(role: AgentRole) -> RoleAssignment:
     return RoleAssignment(
@@ -93,14 +90,16 @@ async def test_orchestrator_all_agents_succeed():
     mock_client = MagicMock(spec=UnifiedLLMClient)
     mock_client.resolve_api_key = MagicMock(return_value="fake-key")
     mock_client.complete_for_role = AsyncMock(
-        return_value=_fake_llm_response([
-            {
-                "category": "structure",
-                "severity": "minor",
-                "title": "Missing subsection",
-                "description": "The introduction lacks a subsection.",
-            }
-        ])
+        return_value=_fake_llm_response(
+            [
+                {
+                    "category": "structure",
+                    "severity": "minor",
+                    "title": "Missing subsection",
+                    "description": "The introduction lacks a subsection.",
+                }
+            ]
+        )
     )
 
     assignments = _make_assignments()
@@ -130,14 +129,16 @@ async def test_orchestrator_partial_failure_recovery():
         # Fail every other call
         if call_count % 2 == 0:
             raise RuntimeError("Simulated LLM failure")
-        return _fake_llm_response([
-            {
-                "category": "claim",
-                "severity": "major",
-                "title": "Unsupported claim",
-                "description": "No evidence provided.",
-            }
-        ])
+        return _fake_llm_response(
+            [
+                {
+                    "category": "claim",
+                    "severity": "major",
+                    "title": "Unsupported claim",
+                    "description": "No evidence provided.",
+                }
+            ]
+        )
 
     mock_client = MagicMock(spec=UnifiedLLMClient)
     mock_client.resolve_api_key = MagicMock(return_value="fake-key")
@@ -166,9 +167,7 @@ async def test_orchestrator_progress_callback():
     """Progress callback is invoked for each agent."""
     mock_client = MagicMock(spec=UnifiedLLMClient)
     mock_client.resolve_api_key = MagicMock(return_value="fake-key")
-    mock_client.complete_for_role = AsyncMock(
-        return_value=_fake_llm_response([])
-    )
+    mock_client.complete_for_role = AsyncMock(return_value=_fake_llm_response([]))
 
     assignments = _make_assignments()
     doc = _make_document()
