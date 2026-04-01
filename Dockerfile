@@ -50,9 +50,11 @@ USER appuser
 # Expose Streamlit port
 EXPOSE 8501
 
-# Health check
+# Health check — verify Streamlit AND app-level readiness (F032)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+    CMD curl -f http://localhost:8501/_stcore/health && \
+        python -c "from paperverifier.health import check_health; h=check_health(); exit(0 if h['healthy'] else 1)" \
+        || exit 1
 
 # Use tini as PID 1 for proper signal handling and zombie reaping
 ENTRYPOINT ["/usr/bin/tini", "--"]

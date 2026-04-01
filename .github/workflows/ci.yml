@@ -107,3 +107,16 @@ jobs:
 
       - name: Run pip-audit
         run: pip-audit --strict --desc --skip-editable
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py environment -o sbom.json --output-format json
+        continue-on-error: true
+
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom
+          path: sbom.json

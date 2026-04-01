@@ -35,6 +35,7 @@ from paperverifier.llm.roles import AgentRole, RoleAssignment
 from paperverifier.models.document import ParsedDocument
 from paperverifier.models.findings import Finding
 from paperverifier.models.report import AgentReport, VerificationReport
+from paperverifier.shutdown import is_shutting_down
 from paperverifier.utils.chunking import create_document_summary
 from paperverifier.utils.prompts import escape_xml_content, get_prompts
 
@@ -275,8 +276,8 @@ class AgentOrchestrator:
                         agent_role=agent.role.value,
                         status="failed",
                         error_message=f"{type(result).__name__}: {result}",
-                        provider=agent._assignment.provider.value,
-                        model=agent._assignment.model,
+                        provider=agent.assignment.provider.value,
+                        model=agent.assignment.model,
                     )
                 )
             elif isinstance(result, AgentReport):
@@ -300,6 +301,17 @@ class AgentOrchestrator:
         **kwargs: Any,
     ) -> AgentReport:
         """Run a single agent with semaphore protection."""
+        # Graceful shutdown check (F033)
+        if is_shutting_down():
+            self._logger.warning("agent_skipped_shutdown", agent=agent.role.value)
+            return AgentReport(
+                agent_role=agent.role.value,
+                status="skipped",
+                error_message="Skipped due to graceful shutdown in progress",
+                provider=agent.assignment.provider.value,
+                model=agent.assignment.model,
+            )
+
         # Circuit breaker check
         if agent.role.value in self._disabled_agents:
             self._logger.warning(
@@ -310,8 +322,8 @@ class AgentOrchestrator:
                 agent_role=agent.role.value,
                 status="disabled",
                 error_message="Circuit breaker open: too many consecutive failures",
-                provider=agent._assignment.provider.value,
-                model=agent._assignment.model,
+                provider=agent.assignment.provider.value,
+                model=agent.assignment.model,
             )
 
         async with self._semaphore:

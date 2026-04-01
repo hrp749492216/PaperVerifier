@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
+from opentelemetry import trace
 
 from paperverifier.audit import log_api_key_access
 from paperverifier.llm.exceptions import (
@@ -33,6 +34,7 @@ from paperverifier.llm.providers import (
 from paperverifier.llm.roles import RoleAssignment
 
 logger = structlog.get_logger(__name__)
+_tracer = trace.get_tracer("paperverifier.llm")
 
 
 # ---------------------------------------------------------------------------
@@ -434,32 +436,44 @@ class UnifiedLLMClient:
             max_tokens=max_tokens,
         )
 
-        try:
-            if spec.sdk_backend == SDKBackend.ANTHROPIC:
-                coro = self._complete_anthropic(
-                    messages,
-                    model,
-                    temperature,
-                    max_tokens,
-                    api_key,
-                )
-            else:
-                coro = self._complete_openai(
-                    messages,
-                    model,
-                    temperature,
-                    max_tokens,
-                    spec.base_url,
-                    api_key,
-                    provider,
-                )
-            response = await asyncio.wait_for(coro, timeout=timeout)
-        except TimeoutError as exc:
-            raise LLMTimeoutError(
-                f"Request timed out after {timeout}s.",
-                provider=provider.value,
-                model=model,
-            ) from exc
+        with _tracer.start_as_current_span(
+            "llm.complete",
+            attributes={
+                "llm.provider": provider.value,
+                "llm.model": model,
+                "llm.message_count": len(messages),
+            },
+        ) as span:
+            try:
+                if spec.sdk_backend == SDKBackend.ANTHROPIC:
+                    coro = self._complete_anthropic(
+                        messages,
+                        model,
+                        temperature,
+                        max_tokens,
+                        api_key,
+                    )
+                else:
+                    coro = self._complete_openai(
+                        messages,
+                        model,
+                        temperature,
+                        max_tokens,
+                        spec.base_url,
+                        api_key,
+                        provider,
+                    )
+                response = await asyncio.wait_for(coro, timeout=timeout)
+            except TimeoutError as exc:
+                span.set_status(trace.StatusCode.ERROR, "timeout")
+                raise LLMTimeoutError(
+                    f"Request timed out after {timeout}s.",
+                    provider=provider.value,
+                    model=model,
+                ) from exc
+
+            span.set_attribute("llm.input_tokens", response.usage.get("input_tokens", 0))
+            span.set_attribute("llm.output_tokens", response.usage.get("output_tokens", 0))
 
         logger.info(
             "llm_response",

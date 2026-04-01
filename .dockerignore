@@ -15,3 +15,11 @@ tests
 !README.md
 .pre-commit-config.yaml
 .github
+# Secrets and credentials (F004)
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+.audit

@@ -96,6 +96,11 @@ class BaseAgent:
         self._total_input_tokens: int = 0
         self._total_output_tokens: int = 0
 
+    @property
+    def assignment(self) -> RoleAssignment:
+        """The role assignment for this agent."""
+        return self._assignment
+
     # ------------------------------------------------------------------
     # LLM call with retry, timeout, and logging
     # ------------------------------------------------------------------
@@ -207,7 +212,7 @@ class BaseAgent:
             try:
                 finding = self._dict_to_finding(item)
                 findings.append(finding)
-            except Exception as exc:  # noqa: BLE001
+            except (KeyError, ValueError, TypeError) as exc:
                 self._logger.warning(
                     "skipping_invalid_finding",
                     index=idx,
@@ -373,12 +378,21 @@ class BaseAgent:
                 )
                 return []
 
+        # Limit concurrent chunk processing to avoid unbounded resource
+        # usage on large documents (F021).
+        max_concurrent_chunks = getattr(get_settings(), "max_concurrent_llm_calls", 10)
+        chunk_semaphore = asyncio.Semaphore(max_concurrent_chunks)
+
+        async def _bounded_process(chunk: DocumentChunk) -> list[Finding]:
+            async with chunk_semaphore:
+                return await _process_chunk(chunk)
+
         # TaskGroup cancels remaining chunks on unexpected errors (fail-fast)
         # instead of waiting for all chunks to finish spending tokens.
         tasks: list[asyncio.Task[list[Finding]]] = []
         async with asyncio.TaskGroup() as tg:
             for chunk in chunks:
-                tasks.append(tg.create_task(_process_chunk(chunk)))
+                tasks.append(tg.create_task(_bounded_process(chunk)))
 
         all_findings: list[Finding] = []
         for task in tasks:

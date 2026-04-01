@@ -18,8 +18,6 @@ Usage (in ``app.py``, before any other Streamlit calls except
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import math
 import os
 import threading
@@ -27,7 +25,11 @@ import time
 import uuid
 from collections import defaultdict
 
+import bcrypt
 import streamlit as st
+
+# Maximum session lifetime in seconds (8 hours).
+_SESSION_MAX_AGE: float = 8 * 3600.0
 
 # ---------------------------------------------------------------------------
 # Brute-force login throttler
@@ -106,10 +108,9 @@ def _get_session_id() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _check_password(password: str, expected_hash: str) -> bool:
-    """Constant-time comparison of SHA-256 hash of *password* against *expected_hash*."""
-    actual = hashlib.sha256(password.encode()).hexdigest()
-    return hmac.compare_digest(actual, expected_hash)
+def _check_password(password: str, expected_hash: bytes) -> bool:
+    """Constant-time bcrypt verification of *password* against *expected_hash*."""
+    return bcrypt.checkpw(password.encode(), expected_hash)
 
 
 def require_auth() -> None:
@@ -157,9 +158,15 @@ def require_auth() -> None:
             )
         st.stop()
 
-    # Already authenticated this session.
+    # Already authenticated this session — check expiry (F006).
     if st.session_state.get("_pv_authenticated"):
-        return
+        login_time = st.session_state.get("_pv_login_time", 0.0)
+        if time.monotonic() - login_time > _SESSION_MAX_AGE:
+            st.session_state["_pv_authenticated"] = False
+            st.session_state.pop("_pv_login_time", None)
+            st.warning("Session expired. Please log in again.")
+        else:
+            return
 
     session_id = _get_session_id()
 
@@ -169,11 +176,17 @@ def require_auth() -> None:
         st.error(f"Too many failed login attempts. Please try again in {remaining} seconds.")
         st.stop()
 
-    # Compute expected hash once.
-    expected_hash = hashlib.sha256(expected_password.encode()).hexdigest()
+    # Compute expected bcrypt hash once (F001).
+    expected_hash = bcrypt.hashpw(expected_password.encode(), bcrypt.gensalt(rounds=12))
 
     st.title("PaperVerifier — Login")
     st.markdown("This application requires authentication.")
+
+    # Logout button in sidebar for convenience (F006).
+    if st.sidebar.button("Logout"):
+        st.session_state["_pv_authenticated"] = False
+        st.session_state.pop("_pv_login_time", None)
+        st.rerun()
 
     with st.form("login_form"):
         password = st.text_input("Password", type="password")
@@ -183,6 +196,7 @@ def require_auth() -> None:
         if _check_password(password, expected_hash):
             _throttler.reset(session_id)
             st.session_state["_pv_authenticated"] = True
+            st.session_state["_pv_login_time"] = time.monotonic()
             st.rerun()
         else:
             _throttler.record_failure(session_id)

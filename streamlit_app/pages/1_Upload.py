@@ -6,13 +6,13 @@ preview, and launches the verification pipeline via :class:`AgentOrchestrator`.
 
 from __future__ import annotations
 
-import logging
 import tempfile
 import threading
 import uuid as _uuid
 from pathlib import Path
 
 import streamlit as st
+import structlog
 
 from paperverifier.config import get_settings
 from streamlit_app.auth import require_auth
@@ -21,7 +21,7 @@ from streamlit_app.utils import run_async  # noqa: F401 – shared async helper
 
 require_auth()
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -137,7 +137,7 @@ with tab_upload:
 
                 except Exception:
                     error_id = str(_uuid.uuid4())[:8]
-                    logger.error("parse_failed", exc_info=True, extra={"error_id": error_id})
+                    logger.error("parse_failed", error_id=error_id, exc_info=True)
                     st.error(f"Failed to parse document. Error ID: {error_id}")
                     status.update(label="Parsing failed", state="error")
                 finally:
@@ -162,7 +162,7 @@ with tab_url:
                 validate_url(paper_url)
             except InputValidationError:
                 error_id = str(_uuid.uuid4())[:8]
-                logger.error("invalid_url", exc_info=True, extra={"error_id": error_id})
+                logger.error("invalid_url", error_id=error_id, exc_info=True)
                 st.error(f"Invalid URL. Error ID: {error_id}")
                 st.stop()
 
@@ -188,7 +188,7 @@ with tab_url:
 
                 except Exception:
                     error_id = str(_uuid.uuid4())[:8]
-                    logger.error("url_parse_failed", exc_info=True, extra={"error_id": error_id})
+                    logger.error("url_parse_failed", error_id=error_id, exc_info=True)
                     st.error(f"Failed to fetch or parse URL. Error ID: {error_id}")
                     status.update(label="Fetch failed", state="error")
 
@@ -212,7 +212,7 @@ with tab_github:
                 validate_github_url(github_url)
             except InputValidationError:
                 error_id = str(_uuid.uuid4())[:8]
-                logger.error("invalid_github_url", exc_info=True, extra={"error_id": error_id})
+                logger.error("invalid_github_url", error_id=error_id, exc_info=True)
                 st.error(f"Invalid GitHub URL. Error ID: {error_id}")
                 st.stop()
 
@@ -238,7 +238,7 @@ with tab_github:
 
                 except Exception:
                     error_id = str(_uuid.uuid4())[:8]
-                    logger.error("github_parse_failed", exc_info=True, extra={"error_id": error_id})
+                    logger.error("github_parse_failed", error_id=error_id, exc_info=True)
                     st.error(f"Failed to clone or parse repository. Error ID: {error_id}")
                     status.update(label="Clone failed", state="error")
 

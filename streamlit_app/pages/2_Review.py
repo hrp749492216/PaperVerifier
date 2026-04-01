@@ -12,6 +12,7 @@ from typing import Any
 import streamlit as st
 
 from streamlit_app.auth import require_auth
+from streamlit_app.sanitize import sanitize_markdown
 
 require_auth()
 
@@ -312,11 +313,11 @@ else:
                 else None,
             )
 
-            # Details
-            st.markdown(f"**Description:** {finding.description}")
+            # Details — sanitize LLM-generated content before rendering (F007)
+            st.markdown(f"**Description:** {sanitize_markdown(finding.description)}")
 
             if finding.suggestion:
-                st.markdown(f"**Suggestion:** {finding.suggestion}")
+                st.markdown(f"**Suggestion:** {sanitize_markdown(finding.suggestion)}")
 
             detail_col1, detail_col2 = st.columns(2)
             with detail_col1:
@@ -337,7 +338,7 @@ else:
             if finding.evidence:
                 st.markdown("**Evidence:**")
                 for ev in finding.evidence:
-                    st.markdown(f"- {ev}")
+                    st.markdown(f"- {sanitize_markdown(ev)}")
 
 
 # ---------------------------------------------------------------------------

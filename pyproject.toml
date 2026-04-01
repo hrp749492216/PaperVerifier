@@ -15,36 +15,35 @@ authors = [
 
 dependencies = [
     # LLM SDKs
-    "anthropic>=0.40.0",
-    "openai>=1.50.0",
+    "anthropic~=0.40.0",
+    "openai~=1.50.0",
     # Web & CLI
-    "click>=8.1",
-    "rich>=13.0",
+    "click~=8.1",
+    "rich~=13.0",
     # Document parsing
-    "pdfplumber>=0.11.0",
-    # pymupdf removed -- AGPL-3.0 incompatible with proprietary license (CRIT-5)
-    # pypdf removed -- unused (HIGH-D1)
-    "python-docx>=1.1.0",
-    "pypandoc>=1.13",
-    # markdown removed -- unused (HIGH-D1)
-    # GitHub & URL -- gitpython/requests removed, unused (HIGH-D1)
-    "aiohttp>=3.10.2",  # Bumped from 3.9 to fix CVE-2024-23334/23829
+    "pdfplumber~=0.11.0",
+    "python-docx~=1.1.0",
+    "pypandoc~=1.13",
+    "aiohttp~=3.10.2",
     # Data & Config
-    "pydantic>=2.5",
-    "pydantic-settings>=2.1",
-    "pyyaml>=6.0",
-    "python-dotenv>=1.0",
+    "pydantic~=2.5",
+    "pydantic-settings~=2.1",
+    "pyyaml~=6.0",
+    "python-dotenv~=1.0",
     # Security
-    "keyring>=25.0",
-    "lxml>=5.0",
+    "bcrypt~=4.1",
+    "keyring~=25.0",
+    "lxml~=5.0",
     # Async
-    "nest-asyncio>=1.6",
+    "nest-asyncio~=1.6",
     # Logging & Observability
-    "structlog>=24.1",
+    "structlog~=24.1",
+    "opentelemetry-api~=1.25",
+    "opentelemetry-sdk~=1.25",
     # JSON parsing
-    "json5>=0.9",
+    "json5~=0.9",
     # Utilities
-    "tenacity>=8.2",
+    "tenacity~=8.2",
 ]
 
 [project.optional-dependencies]
@@ -74,7 +73,7 @@ ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
 "streamlit_app/pages/*.py" = ["N999", "E402"]
-"tests/**/*.py" = ["S105"]
+"tests/**/*.py" = ["S105", "S108"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
